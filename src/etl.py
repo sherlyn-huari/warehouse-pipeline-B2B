@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, Optional
 import duckdb
+import pandas as pd
 import polars as pl
 import kagglehub
 import great_expectations as ge
@@ -48,39 +49,21 @@ class SalesETL:
         logger.debug("SalesETL initialized with data directory: %s", self.data_dir.resolve())
 
     # Data sourcing
-    def load_base_dataset(self, csv_path: Optional[str | Path] = None) -> Optional[pl.DataFrame]:
-        """Load the original dataset if it exists, otherwise return None."""
-        candidates = []
+    def check_dataset(self) -> Optional[pl.DataFrame]:
+        """Check if we have already have the dataset if yes return the path if not return a warning"""
+        self.data_dir.resolve()
         if csv_path is not None:
-            candidates.append(Path(csv_path))
-        candidates.extend(
-            [
-                self.data_dir / "train.csv",
-                self.data_dir / "sales.csv",
-                self.data_dir / "sales_raw.csv",
-            ]
-        )
+
+
 
         for path in candidates:
             if path.exists():
                 logger.debug("Loading base dataset from %s", path)
                 self._clean_kaggle_csv(path)
-                df = pl.read_csv(path, try_parse_dates=True)
-                # Drop unnamed/duplicate trailing columns left by malformed CSV headers.
-                drop_cols = [
-                    col
-                    for col in df.columns
-                    if not col or not col.strip() or col.startswith("_duplicated_")
-                ]
-                if drop_cols:
-                    df = df.drop(drop_cols)
-                essential_cols = [
-                    col_name
-                    for col_name in ["Order ID", "Customer ID", "Sales", "Order Date"]
-                    if col_name in df.columns
-                ]
-                if essential_cols:
-                    df = df.drop_nulls(subset=essential_cols)
+                df = self._clean_csv(path)
+                if df is None:
+                    logger.warning("Failed to clean dataset at %s; trying next candidate.", path)
+                    continue
                 return df
 
         logger.info("Base dataset not found; proceeding with fully synthetic data")
@@ -205,6 +188,45 @@ class SalesETL:
             csv_path.write_text(cleaned, encoding="utf-8")
             logger.debug("Patched Kaggle dataset CSV to fix malformed product names.")
 
+    def _clean_csv(self, csv_path: Path) -> Optional[pl.DataFrame]:
+        """Load and clean a CSV by removing placeholder columns and null-heavy rows."""
+        if not csv_path.exists():
+            logger.warning("Missing csv at %s", csv_path)
+            return None
+
+        try:
+            df = pd.read_csv(csv_path, engine="python")
+        except Exception as exc:
+            logger.error("Failed to read csv %s: %s", csv_path, exc)
+            return None
+
+        df = df.loc[:, ~df.columns.str.startswith("Unnamed")]
+        df = df.dropna(axis=1, how="all")
+        df = df.dropna(axis=0, how="all")
+
+        essential_cols = [
+            col_name
+            for col_name in ["Order ID", "Customer ID", "Sales", "Order Date"]
+            if col_name in df.columns
+        ]
+        if essential_cols:
+            df = df.dropna(subset=essential_cols)
+
+        if df.empty:
+            logger.warning("No rows remaining after cleaning %s", csv_path)
+            return None
+
+        cleaned = pl.from_pandas(df, include_index=False)
+        drop_cols = [
+            col
+            for col in cleaned.columns
+            if not col or not col.strip() or col.startswith("_duplicated_")
+        ]
+        if drop_cols:
+            cleaned = cleaned.drop(drop_cols)
+
+        return cleaned
+    
     def build_dataset(
         self,
         base_df: Optional[pl.DataFrame],
