@@ -51,8 +51,8 @@ class SalesETL:
     # Data sourcing
     def check_dataset(self) -> Optional[pl.DataFrame]:
         """Check if we have already have the dataset if yes return the path if not return a warning"""
-        self.data_dir.resolve()
-        if csv_path is not None:
+        if self.data_dir.resolve():
+            
 
 
 
