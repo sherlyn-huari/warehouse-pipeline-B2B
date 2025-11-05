@@ -38,37 +38,22 @@ class SalesETL:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.synthetic_generator = SyntheticDataGenerator()
-        self.df: Optional[pl.DataFrame] = None
+        self.df: Optional[pd.DataFrame] = None
         self.warehouse_path = self.data_dir / "sales_analytics.duckdb"
-        env_slug = os.getenv("KAGGLE_DATASET_SLUG")
-        default_slugs = [
-            slug for slug in [env_slug, "rohitsahoo/sales-forecasting"] if slug
-        ]
-        self.kaggle_dataset_slugs = list(dict.fromkeys(default_slugs))
+        self.dataset_slug = "rohitsahoo/sales-forecasting"
         self._setup_kaggle_credentials()
         logger.debug("SalesETL initialized with data directory: %s", self.data_dir.resolve())
 
     # Data sourcing
-    def check_dataset(self) -> Optional[pl.DataFrame]:
-        """Check if we have already have the dataset if yes return the path if not return a warning"""
-        if self.data_dir.resolve():
-            
-
-
-
-        for path in candidates:
-            if path.exists():
-                logger.debug("Loading base dataset from %s", path)
-                self._clean_kaggle_csv(path)
-                df = self._clean_csv(path)
-                if df is None:
-                    logger.warning("Failed to clean dataset at %s; trying next candidate.", path)
-                    continue
-                return df
-
-        logger.info("Base dataset not found; proceeding with fully synthetic data")
+    def check_dataset(self) -> Optional[pd.DataFrame]:
+        """Check if we have the dataset if yes return the df if not return a message saying that we are going to donwload the info"""
+        if self.target_csv.exists():
+            logger.debug("Existing dataset found at %s; skipping download.", self.target_csv)
+            df = pd.read_csv(self.target_csv, engine= "python")
+            return df
+        logger.info("Dataset not found; proceeding download with Kaggle credentials")
         return None
-
+    
     def _setup_kaggle_credentials(self) -> None:
         """Load Kaggle credentials from .env (if present)."""
         load_dotenv()
@@ -81,95 +66,26 @@ class SalesETL:
         else:
             logger.warning("Kaggle credentials not found; dataset download may fail.")
 
-    def download_kaggle_dataset(
-        self,
-        dataset_slug: Optional[str] = None,
-        force: bool = False,
-    ) -> Optional[Path]:
+    def download_kaggle_dataset(self,force: bool = False ) -> Optional[Path]:
         """Download dataset from Kaggle into the data directory."""
-        target_csv = self.data_dir / "train.csv"
-        if target_csv.exists() and not force:
-            self._clean_kaggle_csv(target_csv)
-            logger.debug("Existing Kaggle dataset found at %s; skipping download.", target_csv)
-            return target_csv
+        try:
+            logger.info("Downloading dataset %s ", self.dataset_slug)
+            download_path = Path(kagglehub.dataset_download(self.dataset_slug))
 
-        slugs_to_try = []
-        if dataset_slug:
-            slugs_to_try.append(dataset_slug)
-        slugs_to_try.extend(self.kaggle_dataset_slugs)
-
-        seen: set[str] = set()
-        slugs_to_try = [
-            slug for slug in slugs_to_try if slug and not (slug in seen or seen.add(slug))
-        ]
-
-        if not slugs_to_try:
-            logger.warning("No Kaggle dataset slug configured; skipping download.")
-            return None
-
-        for slug in slugs_to_try:
-            try:
-                logger.info("Downloading dataset %s into %s", slug, self.data_dir)
-                download_path = Path(kagglehub.dataset_download(slug, path=str(self.data_dir)))
-                logger.debug("Dataset %s downloaded to %s", slug, download_path)
-            except Exception as exc: 
-                logger.warning("Kaggle download failed for %s: %s", slug, exc)
-                cached_csv = self._find_cached_kaggle_csv(slug)
-                if cached_csv:
-                    shutil.copy2(cached_csv, target_csv)
-                    logger.info("Used cached dataset for %s -> %s", slug, target_csv)
-                    return target_csv
-                continue
-
-            csv_candidates = []
-            if download_path.is_file():
-                csv_candidates.append(download_path)
+            train_csv = download_path / "train.csv"
+            if train_csv.exists():
+                target = self.data_dir / "train.csv"
+                shutil.copy2(train_csv, target)
+                logger.info("Dataset copied to %s", target)
+                return target
             else:
-                csv_candidates.append(download_path / "train.csv")
-                try:
-                    csv_candidates.extend(download_path.rglob("train.csv"))
-                except (NotADirectoryError, PermissionError):
-                    pass
-
-            for csv_path in csv_candidates:
-                if csv_path.exists():
-                    shutil.copy2(csv_path, target_csv)
-                    self._clean_kaggle_csv(target_csv)
-                    logger.info("Dataset downloaded to %s via %s", target_csv, slug)
-                    return target_csv
-
-            cached_csv = self._find_cached_kaggle_csv(slug)
-            if cached_csv:
-                shutil.copy2(cached_csv, target_csv)
-                self._clean_kaggle_csv(target_csv)
-                logger.info("Used cached dataset for %s -> %s", slug, target_csv)
-                return target_csv
-
-            logger.warning("train.csv not found after downloading %s.", slug)
-
-        return None
-
-    def _find_cached_kaggle_csv(self, slug: str) -> Optional[Path]:
-        """Return train.csv from KaggleHub cache if it exists."""
-        cache_root = Path.home() / ".cache" / "kagglehub" / "datasets" / slug / "versions"
-        if not cache_root.exists():
+                logger.warning("train.csv not found in %s", download_path)
+                return None
+        except Exception as exc: 
+            logger.error("Dataset download failed for %s", exc)
             return None
 
-        version_dirs = sorted(
-            [path for path in cache_root.iterdir() if path.is_dir()],
-            key=lambda path: path.name,
-            reverse=True,
-        )
-
-        for version_dir in version_dirs:
-            csv_path = version_dir / "train.csv"
-            if csv_path.exists():
-                logger.debug("Found cached Kaggle dataset for %s at %s", slug, csv_path)
-                return csv_path
-
-        return None
-
-    def _clean_kaggle_csv(self, csv_path: Path) -> None:
+    def _fix_format_csv(self, csv_path: Path) -> None:
         """Patch known CSV issues (e.g., stray commas in product names) before loading."""
         if not csv_path.exists():
             return
@@ -188,8 +104,8 @@ class SalesETL:
             csv_path.write_text(cleaned, encoding="utf-8")
             logger.debug("Patched Kaggle dataset CSV to fix malformed product names.")
 
-    def _clean_csv(self, csv_path: Path) -> Optional[pl.DataFrame]:
-        """Load and clean a CSV by removing placeholder columns and null-heavy rows."""
+    def _clean_csv(self, csv_path: Path) -> Optional[pd.DataFrame]:
+        """Clean a CSV by removing unnamed columns and any rows with null values"""
         if not csv_path.exists():
             logger.warning("Missing csv at %s", csv_path)
             return None
@@ -201,38 +117,19 @@ class SalesETL:
             return None
 
         df = df.loc[:, ~df.columns.str.startswith("Unnamed")]
-        df = df.dropna(axis=1, how="all")
-        df = df.dropna(axis=0, how="all")
+        initial_rows = len(df)
+        df = df.dropna(axis=0, how="any")
+        rows_removed = initial_rows - len(df)
+        logger.info("Removed %s rows containing null values", rows_removed)
 
-        essential_cols = [
-            col_name
-            for col_name in ["Order ID", "Customer ID", "Sales", "Order Date"]
-            if col_name in df.columns
-        ]
-        if essential_cols:
-            df = df.dropna(subset=essential_cols)
-
-        if df.empty:
-            logger.warning("No rows remaining after cleaning %s", csv_path)
-            return None
-
-        cleaned = pl.from_pandas(df, include_index=False)
-        drop_cols = [
-            col
-            for col in cleaned.columns
-            if not col or not col.strip() or col.startswith("_duplicated_")
-        ]
-        if drop_cols:
-            cleaned = cleaned.drop(drop_cols)
-
-        return cleaned
+        return df
     
     def build_dataset(
         self,
-        base_df: Optional[pl.DataFrame],
+        base_df: Optional[pd.DataFrame],
         num_synthetic_rows: int = 5000,
         **kwargs,
-    ) -> pl.DataFrame:
+    ) -> pd.DataFrame:
         """Combine base data with synthetic rows (or generate synthetic from scratch)."""
         if base_df is None or len(base_df) == 0:
             logger.info("Generating synthetic dataset with %s rows", num_synthetic_rows)
