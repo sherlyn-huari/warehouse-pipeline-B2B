@@ -45,12 +45,12 @@ class SalesETL:
         logger.debug("SalesETL initialized with data directory: %s", self.data_dir.resolve())
 
     # Data sourcing
-    def check_dataset(self) -> Optional[pd.DataFrame]:
+    def check_dataset(self) -> Optional[Path]:
         """Check if we have the dataset if yes return the df if not return a message saying that we are going to donwload the info"""
-        if self.target_csv.exists():
+        train_csv = self.data_dir / "train.csv"
+        if train_csv.exists():
             logger.debug("Existing dataset found at %s; skipping download.", self.target_csv)
-            df = pd.read_csv(self.target_csv, engine= "python")
-            return df
+            return train_csv
         logger.info("Dataset not found; proceeding download with Kaggle credentials")
         return None
     
@@ -127,30 +127,41 @@ class SalesETL:
     def build_dataset(
         self,
         base_df: Optional[pd.DataFrame],
-        num_synthetic_rows: int = 5000,
+        num_synthetic_rows: int = 10000,
         **kwargs,
     ) -> pd.DataFrame:
-        """Combine base data with synthetic rows (or generate synthetic from scratch)."""
-        if base_df is None or len(base_df) == 0:
-            logger.info("Generating synthetic dataset with %s rows", num_synthetic_rows)
-            return self.synthetic_generator.generate_synthetic_data(
-                num_rows=num_synthetic_rows, **kwargs
-            )
+        """Combine base data with synthetic rows."""
+        logger.info("Generating synthetic dataset: Augmenting base dataset (%s rows) with %s synthetic rows", 
+                    len(base_df), num_synthetic_rows)
 
-        logger.info(
-            "Augmenting base dataset (%s rows) with %s synthetic rows",
-            len(base_df),
-            num_synthetic_rows,
-        )
-        return self.synthetic_generator.augment_dataframe(
-            base_df, num_synthetic_rows=num_synthetic_rows, **kwargs
-        )
+        return self.synthetic_generator.generate_synthetic_data(
+                num_rows=num_synthetic_rows, **kwargs )
+    
+    def format_columns(self, df: pd.DataFrame) ->  Optional[pd.DataFrame]:
+        """Clean column names and  enforce types."""
+        rename_map: Dict[str, str] = {
+            col: col.strip().lower().replace(" ", "_").replace("-", "_")
+            for col in df.columns
+        }
+        formated = df.rename(rename_map)
 
+        if "order_date" in formated.columns:
+            formated["order_date"] = pd.to_datetime(formated["order_date"], errors="coerce")
+        if "ship_date" in formated.columns:
+            formated["ship_date"] = pd.to_datetime(formated["ship_date"], errors="coerce")
+        if "sales" in formated.columns:
+            formated["sales"] = pd.to_numeric(formated["sales"], errors="coerce")
+        if "postal_code" in formated.columns:
+            formated["postal_code"]= formated["postal_code"].astype("string")
 
+        self.df = formated
+        logger.debug("Transformed dataset with %s rows and %s columns", len(formated), len(formated.columns))
+        return formated
+    
     # Transformations
 
-    def transform(self, df: pl.DataFrame) -> pl.DataFrame:
-        """Clean column names, enforce types, and derive analytical columns."""
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Derive analytical columns."""
         rename_map: Dict[str, str] = {
             col: col.strip().lower().replace(" ", "_").replace("-", "_")
             for col in df.columns

@@ -141,8 +141,8 @@ class SyntheticDataGenerator:
         self,
         original_df: Optional[pl.DataFrame] = None,
         num_rows: int = 10_000,
-        start_date: date = date(2020, 1, 1),
-        end_date: date = date(2024, 12, 31),
+        start_date: date = date(2015, 1, 1),
+        end_date: date = date(2018, 12, 31),
     ) -> pl.DataFrame:
         """Generate synthetic sales records."""
 
