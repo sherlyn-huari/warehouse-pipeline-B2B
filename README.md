@@ -1,12 +1,29 @@
 # Smart Sales Analyzer
 
-A small end-to-end analytics playground: pull the Kaggle sales dataset (or reuse a cached copy), top it up with synthetic records, validate with Great Expectations, and stash the results in DuckDB for easy querying and a Streamlit front end.
+A modern data engineering project demonstrating **Azure Databricks** best practices with end-to-end ETL/ELT pipelines, medallion architecture, and analytics-ready data warehousing.
+
+## Tech Stack
+
+**Azure Cloud Platform:**
+- **Azure Databricks** - Managed Apache Spark for distributed data processing
+- **Azure Data Lake Storage Gen2 (ADLS)** - Scalable data lake for raw and processed data
+- **Delta Lake** - ACID transactions, time travel, and schema evolution
+- **Databricks SQL Warehouse** - Serverless analytics engine
+- **Unity Catalog** - Data governance and access control
+
+**Local Development:**
+- **Python 3.12** with Polars/Pandas for prototyping
+- **DuckDB** - Local analytics database for testing
+- **Great Expectations** - Data quality validation
+- **Streamlit** - Interactive dashboard
 
 ## What You Get
-- **Modern ETL**: Polars + DuckDB pipeline with Great Expectations validation.
-- **Flexible sourcing**: Pulls the Kaggle dataset (or reuses the cached copy) and fills gaps with synthetic data.
-- **Ready-to-query warehouse**: Materialised tables in `data/sales_analytics.duckdb`.
-- **Interactive reporting**: Streamlit dashboard for quick demos.
+- **Medallion Architecture**: Bronze → Silver → Gold data layers with Delta Lake
+- **Modern ETL**: Production-ready Databricks notebooks with PySpark
+- **Flexible sourcing**: Kaggle dataset + synthetic data augmentation
+- **Data Quality**: Built-in validation with Delta Live Tables expectations
+- **Ready-to-query warehouse**: DuckDB for local dev, Databricks SQL for production
+- **Interactive reporting**: Streamlit dashboard for demos
 
 ## Quickstart
 
@@ -106,18 +123,49 @@ PY
 ## Repository Layout
 
 ```
-├── data/                     
+├── data/                     # Local development data
 │   ├── sales_analytics.duckdb
 │   ├── sales_enriched.parquet
 │   ├── *.csv (summary tables)
 │   └── quality_report.json
-├── src/
-│   ├── etl.py                 
-│   ├── dashboard.py           
+├── src/                      # Local ETL scripts
+│   ├── etl.py
+│   ├── dashboard.py
 │   └── synthetic_data_generator.py
+├── databricks/               # Azure Databricks deployment
+│   ├── notebooks/
+│   │   ├── bronze/           # Raw data ingestion
+│   │   ├── silver/           # Cleaned & enriched data
+│   │   └── gold/             # Business aggregations
+│   ├── workflows/            # Job orchestration configs
+│   └── config/               # Databricks settings
+├── docs/                     # Architecture documentation
+│   └── ARCHITECTURE.md       # Azure Databricks stack design
 ├── requirements.txt
 └── README.md
 ```
+
+## Azure Databricks Architecture
+
+This project demonstrates a production-ready **Medallion Architecture** on Azure Databricks:
+
+**Bronze Layer** (Raw Data)
+- Ingest from Kaggle + synthetic generation
+- Store as Delta Lake tables in ADLS
+- No transformations, full audit trail
+
+**Silver Layer** (Cleaned Data)
+- Data quality validation with DLT expectations
+- Column standardization and type casting
+- Derived columns (order_year, order_month)
+- Partitioned by date for performance
+
+**Gold Layer** (Analytics Ready)
+- Pre-aggregated business metrics
+- Optimized for BI queries
+- Yearly/segment/regional summaries
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture diagrams and design decisions.
 
 ## Demo Shots
 Drop your screenshots in `assets/` and reference them here. Examples from my run:

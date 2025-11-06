@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Dict, Optional
 import duckdb
 import pandas as pd
-import polars as pl
 import kagglehub
 import great_expectations as ge
 from dotenv import load_dotenv
@@ -124,68 +123,58 @@ class SalesETL:
 
         return df
     
+    def load_base_dataset(self, csv_path: Path) -> Optional[pd.DataFrame]:
+        """Load and clean the base dataset from CSV."""
+        if csv_path is None or not csv_path.exists():
+            logger.warning("CSV path does not exist: %s", csv_path)
+            return None
+
+        self._fix_format_csv(csv_path)
+        return self._clean_csv(csv_path)
+
     def build_dataset(
         self,
         base_df: Optional[pd.DataFrame],
         num_synthetic_rows: int = 10000,
         **kwargs,
     ) -> pd.DataFrame:
-        """Combine base data with synthetic rows."""
-        logger.info("Generating synthetic dataset: Augmenting base dataset (%s rows) with %s synthetic rows", 
-                    len(base_df), num_synthetic_rows)
-
-        return self.synthetic_generator.generate_synthetic_data(
+        """Combine Kaggle data with synthetic augmentation."""
+        logger.info("Generating %s synthetic rows", num_synthetic_rows)
+        synthetic_df = self.synthetic_generator.generate_synthetic_data(
                 num_rows=num_synthetic_rows, **kwargs )
-    
-    def format_columns(self, df: pd.DataFrame) ->  Optional[pd.DataFrame]:
-        """Clean column names and  enforce types."""
-        rename_map: Dict[str, str] = {
-            col: col.strip().lower().replace(" ", "_").replace("-", "_")
-            for col in df.columns
-        }
-        formated = df.rename(rename_map)
 
-        if "order_date" in formated.columns:
-            formated["order_date"] = pd.to_datetime(formated["order_date"], errors="coerce")
-        if "ship_date" in formated.columns:
-            formated["ship_date"] = pd.to_datetime(formated["ship_date"], errors="coerce")
-        if "sales" in formated.columns:
-            formated["sales"] = pd.to_numeric(formated["sales"], errors="coerce")
-        if "postal_code" in formated.columns:
-            formated["postal_code"]= formated["postal_code"].astype("string")
+        if base_df is not None:
+            logger.info("Combining %s Kaggle rows with %s synthetic rows", len(base_df), len(synthetic_df))
+            return pd.concat([base_df, synthetic_df], ignore_index=True)
 
-        self.df = formated
-        logger.debug("Transformed dataset with %s rows and %s columns", len(formated), len(formated.columns))
-        return formated
-    
+        return synthetic_df
+
     # Transformations
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Derive analytical columns."""
+        """Transform raw data: standardize columns, extract dates, calculate metrics."""
         rename_map: Dict[str, str] = {
             col: col.strip().lower().replace(" ", "_").replace("-", "_")
             for col in df.columns
         }
-        transformed = df.rename(rename_map)
-
-        with_columns = []
+        transformed = df.rename(columns=rename_map).copy()
 
         if "order_date" in transformed.columns:
-            with_columns.append(pl.col("order_date").cast(pl.Date))
-            with_columns.append(pl.col("order_date").dt.year().alias("order_year"))
-            with_columns.append(pl.col("order_date").dt.month().alias("order_month"))
+            transformed["order_date"] = pd.to_datetime(transformed["order_date"], errors="coerce")
+            transformed["order_year"] = transformed["order_date"].dt.year
+            transformed["order_month"] = transformed["order_date"].dt.month
 
         if "ship_date" in transformed.columns:
-            with_columns.append(pl.col("ship_date").cast(pl.Date))
+            transformed["ship_date"] = pd.to_datetime(transformed["ship_date"], errors="coerce")
+
+        if "order_date" in transformed.columns and "ship_date" in transformed.columns:
+            transformed["ship_latency_days"] = (transformed["ship_date"] - transformed["order_date"]).dt.days
 
         if "sales" in transformed.columns:
-            with_columns.append(pl.col("sales").cast(pl.Float64))
+            transformed["sales"] = pd.to_numeric(transformed["sales"], errors="coerce")
 
         if "postal_code" in transformed.columns:
-            with_columns.append(pl.col("postal_code").cast(pl.Utf8))
-
-        if with_columns:
-            transformed = transformed.with_columns(with_columns)
+            transformed["postal_code"] = transformed["postal_code"].astype(str)
 
         self.df = transformed
         logger.debug("Transformed dataset with %s rows and %s columns", len(transformed), len(transformed.columns))
@@ -193,52 +182,52 @@ class SalesETL:
 
     # Reporting
 
-    def build_summaries(self, df: pl.DataFrame) -> Dict[str, pl.DataFrame]:
+    def build_summaries(self, df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         """Create summary tables for analytics and reporting."""
-        summaries: Dict[str, pl.DataFrame] = {}
+        summaries: Dict[str, pd.DataFrame] = {}
 
         if "order_year" in df.columns:
             summaries["yearly"] = (
-                df.group_by("order_year")
+                df.groupby("order_year", as_index=False)
                 .agg(
-                    pl.len().alias("rows"),
-                    pl.col("sales").sum().round(2).alias("revenue"),
-                    pl.col("customer_id").n_unique().alias("unique_customers"),
+                    rows=("order_year", "count"),
+                    revenue=("sales", lambda x: round(x.sum(), 2)),
+                    unique_customers=("customer_id", "nunique"),
                 )
-                .sort("order_year")
+                .sort_values("order_year")
             )
 
         if {"order_year", "segment"}.issubset(df.columns):
             summaries["segment_yearly"] = (
-                df.group_by(["order_year", "segment"])
-                .agg(pl.col("sales").sum().round(2).alias("revenue"))
-                .sort(["order_year", "revenue"], descending=[False, True])
+                df.groupby(["order_year", "segment"], as_index=False)
+                .agg(revenue=("sales", lambda x: round(x.sum(), 2)))
+                .sort_values(["order_year", "revenue"], ascending=[True, False])
             )
 
         if "region" in df.columns:
             summaries["regional_revenue"] = (
-                df.group_by("region")
-                .agg(pl.col("sales").sum().round(2).alias("revenue"))
-                .sort("revenue", descending=True)
+                df.groupby("region", as_index=False)
+                .agg(revenue=("sales", lambda x: round(x.sum(), 2)))
+                .sort_values("revenue", ascending=False)
             )
 
         if "product_name" in df.columns:
             summaries["top_products"] = (
-                df.group_by("product_name")
+                df.groupby("product_name", as_index=False)
                 .agg(
-                    pl.col("sales").sum().round(2).alias("revenue"),
-                    pl.len().alias("orders"),
+                    revenue=("sales", lambda x: round(x.sum(), 2)),
+                    orders=("product_name", "count"),
                 )
-                .sort("revenue", descending=True)
+                .sort_values("revenue", ascending=False)
                 .head(15)
             )
 
         logger.debug("Built %s summary tables", len(summaries))
         return summaries
 
-    def run_quality_checks(self, df: pl.DataFrame) -> Dict[str, bool]:
+    def run_quality_checks(self, df: pd.DataFrame) -> Dict[str, bool]:
         """Run lightweight Great Expectations checks on critical columns."""
-        pandas_df = df.to_pandas()
+        pandas_df = df
         context = ge.get_context()
         execution_engine = PandasExecutionEngine()
         execution_engine.data_context = context
@@ -294,18 +283,18 @@ class SalesETL:
     # Persistence
     def persist_outputs(
         self,
-        df: pl.DataFrame,
-        summaries: Dict[str, pl.DataFrame],
+        df: pd.DataFrame,
+        summaries: Dict[str, pd.DataFrame],
         quality_results: Dict[str, bool],
     ) -> None:
         """Persist the dataset, summary tables, and quality report under the data directory."""
         dataset_path = self.data_dir / "sales_enriched.parquet"
-        df.write_parquet(dataset_path)
+        df.to_parquet(dataset_path, index=False)
         logger.info("Saved enriched dataset to %s", dataset_path)
 
         for name, table in summaries.items():
             output_path = self.data_dir / f"{name}.csv"
-            table.write_csv(output_path)
+            table.to_csv(output_path, index=False)
             logger.info("Saved %s summary to %s", name, output_path)
 
         quality_path = self.data_dir / "quality_report.json"
@@ -314,13 +303,15 @@ class SalesETL:
 
     def load_into_warehouse(
         self,
-        df: pl.DataFrame,
-        summaries: Dict[str, pl.DataFrame],
+        df: pd.DataFrame,
+        summaries: Dict[str, pd.DataFrame],
     ) -> None:
         """Load datasets into DuckDB for interactive analytics."""
         with duckdb.connect(str(self.warehouse_path)) as conn:
             conn.execute("CREATE SCHEMA IF NOT EXISTS analytics")
-            conn.register("sales_dataset", df.to_arrow())
+            import pyarrow as pa
+            arrow_table = pa.Table.from_pandas(df)
+            conn.register("sales_dataset", arrow_table)
             conn.execute(
                 "CREATE OR REPLACE TABLE analytics.sales AS SELECT * FROM sales_dataset"
             )
@@ -328,7 +319,8 @@ class SalesETL:
 
             for name, table in summaries.items():
                 view_name = f"{name}_summary"
-                conn.register(view_name, table.to_arrow())
+                arrow_summary = pa.Table.from_pandas(table)
+                conn.register(view_name, arrow_summary)
                 conn.execute(
                     f"CREATE OR REPLACE TABLE analytics.{view_name} AS SELECT * FROM {view_name}"
                 )
@@ -342,7 +334,7 @@ class SalesETL:
         csv_path: Optional[str | Path] = None,
         num_synthetic_rows: int = 5_000,
         **kwargs,
-    ) -> pl.DataFrame:
+    ) -> pd.DataFrame:
         """Execute the full pipeline."""
         if csv_path is None:
             csv_candidate = self.download_kaggle_dataset()
