@@ -87,7 +87,7 @@ class SyntheticDataGenerator:
         start_date: date,
         end_date: date,
         min_ship_days: int = 1,
-        max_ship_days: int = 14,
+        max_ship_days: int = 9,
     ) -> tuple[date, date]:
         """Generate order and ship dates (ship date after order date)."""
         order_date = self.fake.date_between(start_date=start_date, end_date=end_date)

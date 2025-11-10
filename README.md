@@ -1,199 +1,120 @@
 # Smart Sales Analyzer
 
-A modern data engineering project demonstrating **Azure Databricks** best practices with end-to-end ETL/ELT pipelines, medallion architecture, and analytics-ready data warehousing.
+An AWS-focused **data engineering pipeline** that ingests raw sales records, applies a Medallion-style refinement flow, and produces curated analytics outputs without racking up large infrastructure costs. Develop locally with DuckDB/Streamlit, then deploy the same steps inside AWS managed services when desired.
 
-## Tech Stack
+## Project scope
+- This repository is **purely a data engineering + pipeline build**: ingestion, cleaning, enrichment, quality checks, and curated outputs.
+- There is **no production app or SaaS** component—just an end-to-end pipeline you can point at AWS Glue/S3/Athena.
+- Streamlit is included only to **inspect the gold tables produced by the pipeline**.
 
-**Azure Cloud Platform:**
-- **Azure Databricks** - Managed Apache Spark for distributed data processing
-- **Azure Data Lake Storage Gen2 (ADLS)** - Scalable data lake for raw and processed data
-- **Delta Lake** - ACID transactions, time travel, and schema evolution
-- **Databricks SQL Warehouse** - Serverless analytics engine
-- **Unity Catalog** - Data governance and access control
+## Why it matters
+- **Real AWS story** – S3-based lakehouse, AWS Glue ETL, Athena SQL layer, and QuickSight-ready outputs.
+- **Modern patterns** – medallion layers, data quality checks, DuckDB development workflow, and an interactive Streamlit dashboard.
 
-**Local Development:**
-- **Python 3.12** with Polars/Pandas for prototyping
-- **DuckDB** - Local analytics database for testing
-- **Great Expectations** - Data quality validation
-- **Streamlit** - Interactive dashboard
+## Architecture at a glance
+```
+Kaggle + Synthetic Data
+          │
+          ▼
+ ┌─────────────────┐
+ │  S3 Bronze Lake │  (raw parquet/csv, versioned)
+ └─────────────────┘
+          │  AWS Glue Jobs / Ray on Glue
+          ▼
+ ┌─────────────────┐
+ │ S3 Silver Layer │  (clean + enriched, schema enforced)
+ └─────────────────┘
+          │  Quality checks → AWS Glue Data Quality / Great Expectations
+          ▼
+ ┌─────────────────┐
+ │ S3 Gold Layer   │  (aggregations for BI)
+ └─────────────────┘
+          │
+     ┌────┴───────────────┐
+     │                     │
+ Amazon Athena       Amazon QuickSight
+ (SQL + DuckDB      (dashboards, or keep
+  parity)            Streamlit for demos)
+```
 
-## What You Get
-- **Medallion Architecture**: Bronze → Silver → Gold data layers with Delta Lake
-- **Modern ETL**: Production-ready Databricks notebooks with PySpark
-- **Flexible sourcing**: Kaggle dataset + synthetic data augmentation
-- **Data Quality**: Built-in validation with Delta Live Tables expectations
-- **Ready-to-query warehouse**: DuckDB for local dev, Databricks SQL for production
-- **Interactive reporting**: Streamlit dashboard for demos
+Orchestration options:
+- **AWS Step Functions + Glue Jobs** for fully managed pipelines.
+- **Amazon MWAA (Airflow)** or **Dagster on ECS Fargate** if you need Airflow/Dagster compatibility.
+- **EventBridge Scheduler + Lambda** for the absolute lowest-cost cron style trigger.
 
-## Quickstart
+## AWS components & cost controls
+- **Amazon S3** – single bucket with `bronze/`, `silver/`, `gold/` prefixes; enable Intelligent-Tiering and lifecycle rules to stay in the free tier.
+- **AWS Glue** – use **Glue Studio Notebooks** (pay only when you run) for dev, then convert to Glue Jobs; 0.0625 DPU sessions keep per-run cost pennies.
+- **AWS Glue Data Catalog + Lake Formation** – central schema registry and governance; free unless you exceed one million requests.
+- **AWS Glue Data Quality or Great Expectations** – start with the local GE checks already in `src/etl.py`, then port expectations into Glue.
+- **Amazon Athena** – query the gold tables directly on S3; costs ~$5 per TB scanned, so keep data columnar (Parquet) and partition on `order_year`.
+- **Amazon QuickSight SPICE** – free for 1 user for 90 days; after that either export CSVs or connect the Streamlit app via `streamlit run src/dashboard.py`.
+- **Amazon CloudWatch Logs** – ingest Glue/Step Functions logs with log retention set to 1–3 days to avoid surprises.
 
+> **Pro tip:** stay entirely in local mode (DuckDB + Streamlit) while building; once you’re happy, deploy a single Glue job + Athena view run. One monthly execution at the smallest scale keeps costs well under $1.
+
+## Local development workflow (free)
 ```bash
 # 1) Clone and enter the project
+git clone <your-fork-url>
 cd smart_sales_analyzer
 
-# 2) Create/activate a virtual environment (optional but recommended)
+# 2) Create & activate a virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 
 # 3) Install dependencies
 pip install -r requirements.txt
 
-# 4) (Optional) Export Kaggle credentials if you want to re-download the dataset
+# 4) (Optional) pull fresh data
 export KAGGLE_USERNAME=your_username
 export KAGGLE_KEY=your_key
+python src/etl.py --download
 ```
 
-## Run the ETL
-
+## Run the ETL locally
 ```bash
 source .venv/bin/activate
 python src/etl.py
 ```
 
-Outputs land in `data/`:
-- `train.csv` – cleansed Kaggle source (cached copy if Kaggle API is unavailable)
-- `sales_enriched.parquet` – blended dataset with synthetic augmentation
-- `regional_revenue.csv`, `segment_yearly.csv`, `top_products.csv`, `yearly.csv`
-- `quality_report.json` – Great Expectations results
-- `sales_analytics.duckdb` – DuckDB file with analytics tables
+Key outputs inside `data/`:
+- `train.csv` – cached Kaggle dataset
+- `sales_enriched.parquet` – silver-layer equivalent
+- `regional_revenue.csv`, `segment_yearly.csv`, `top_products.csv`, `yearly.csv` – gold-layer summaries
+- `sales_analytics.duckdb` – DuckDB database mirroring what Athena/Glue tables will hold
+- `quality_report.json` – Great Expectations validation log
 - `etl_pipeline.log` – run history
 
-## Launch the Streamlit Dashboard
-
+## Streamlit dashboard (pipeline validation)
 ```bash
 source .venv/bin/activate
 streamlit run src/dashboard.py
 ```
+This reads the curated tables so you can validate dimensions, measures, and filters before exposing them through Athena or QuickSight.
 
-Use the URL printed in the terminal to open the interactive report (filters, charts, KPIs).
+## Deploying to AWS on a budget
+1. **Create an S3 bucket** (`smart-sales-analyzer-<alias>`) with `bronze/`, `silver/`, `gold/` prefixes.
+2. **Upload** `data/train.csv` to `bronze/raw/`.
+3. **Package the ETL**: zip `src/etl.py`, dependencies from `requirements.txt`, and upload to S3 (or use a container image stored in ECR) for Glue.
+4. **Spin up a Glue Studio Notebook**, point it at the `etl.py` logic, and test with a `1 DPU` session (costs cents).
+5. **Convert notebook → Glue Job**, schedule it via **EventBridge Scheduler** or **Step Functions** (both free for low volume).
+6. **Catalog the tables** with Glue Crawlers (first million objects per month are free) so Athena can discover the schemas.
+7. **Build Athena views** over `gold/` data to expose the metrics layer.
+8. **Optional**: Publish a QuickSight dashboard or host the Streamlit app if stakeholders need visuals.
 
-## Explore DuckDB Tables via CLI
-
-```bash
-source .venv/bin/activate
-python - <<'PY'
-import duckdb
-
-with duckdb.connect("data/sales_analytics.duckdb", read_only=True) as con:
-    con.sql("SHOW TABLES FROM analytics").show()
-    con.sql("""
-        SELECT order_year, SUM(sales) AS revenue
-        FROM analytics.sales
-        GROUP BY 1
-        ORDER BY 1
-    """).show()
-PY
+## Repository layout
 ```
-
-More handy snippets for screenshots or demos:
-
-```bash
-source .venv/bin/activate
-python - <<'PY'
-import duckdb
-
-with duckdb.connect("data/sales_analytics.duckdb", read_only=True) as con:
-    con.sql("""
-        SELECT COUNT(*) AS rows, SUM(sales) AS total_revenue
-        FROM analytics.sales
-    """).show()
-    con.sql("""
-        SELECT MIN(order_date) AS min_date, MAX(order_date) AS max_date
-        FROM analytics.sales
-    """).show()
-    con.sql("""
-        SELECT order_year, segment, revenue
-        FROM analytics.segment_yearly_summary
-        ORDER BY order_year, revenue DESC
-    """).show()
-    con.sql("""
-        SELECT *
-        FROM analytics.regional_revenue_summary
-        ORDER BY revenue DESC
-    """).show()
-    con.sql("""
-        SELECT *
-        FROM analytics.top_products_summary
-        ORDER BY revenue DESC
-        LIMIT 15
-    """).show()
-PY
-```
-
-## Repository Layout
-
-```
-├── data/                     # Local development data
-│   ├── sales_analytics.duckdb
-│   ├── sales_enriched.parquet
-│   ├── *.csv (summary tables)
-│   └── quality_report.json
-├── src/                      # Local ETL scripts
-│   ├── etl.py
-│   ├── dashboard.py
-│   └── synthetic_data_generator.py
-├── databricks/               # Azure Databricks deployment
-│   ├── notebooks/
-│   │   ├── bronze/           # Raw data ingestion
-│   │   ├── silver/           # Cleaned & enriched data
-│   │   └── gold/             # Business aggregations
-│   ├── workflows/            # Job orchestration configs
-│   └── config/               # Databricks settings
-├── docs/                     # Architecture documentation
-│   └── ARCHITECTURE.md       # Azure Databricks stack design
+├── data/                     # Local development data + DuckDB lakehouse mirror
+├── src/
+│   ├── etl.py                # Spark/Polars ETL (drop-in for Glue)
+│   ├── synthetic_data_generator.py
+│   └── dashboard.py          # Streamlit front-end
+├── assets/                   # Reference charts generated from gold tables
 ├── requirements.txt
 └── README.md
 ```
 
-## Azure Databricks Architecture
+When you add AWS-specific assets (IaC, Glue scripts, Step Functions), drop them under `infra/aws/` or `aws/` for quick discovery.
 
-This project demonstrates a production-ready **Medallion Architecture** on Azure Databricks:
-
-**Bronze Layer** (Raw Data)
-- Ingest from Kaggle + synthetic generation
-- Store as Delta Lake tables in ADLS
-- No transformations, full audit trail
-
-**Silver Layer** (Cleaned Data)
-- Data quality validation with DLT expectations
-- Column standardization and type casting
-- Derived columns (order_year, order_month)
-- Partitioned by date for performance
-
-**Gold Layer** (Analytics Ready)
-- Pre-aggregated business metrics
-- Optimized for BI queries
-- Yearly/segment/regional summaries
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture diagrams and design decisions.
-
-## Demo Shots
-Drop your screenshots in `assets/` and reference them here. Examples from my run:
-
-<p align="center">
-  <img src="assets/streamline_dashboard_1.png" alt="Streamlit dashboard overview" width="640">
-</p>
-
-<p align="center">
-  <img src="assets/streamline_dashboard_2.png" alt="Streamlit dashboard product drilldown" width="640">
-</p>
-
-<p align="center">
-  <img src="assets/streamline_dashboard_3.png" alt="Streamlit dashboard regional view" width="640">
-</p>
-
-<p align="center">
-  <img src="assets/pipeline_run_snippet.png" alt="ETL execution with data quality success" width="640">
-</p>
-
-<p align="center">
-  <img src="assets/analytics.yearly_summary.png" alt="DuckDB yearly revenue query results" width="640">
-</p>
-
-<p align="center">
-  <img src="assets/analytics.top_products_summary.png" alt="DuckDB top products query results" width="640">
-</p>
-
-<p align="center">
-  <img src="assets/analytics.regional_revenue_summary.png" alt="DuckDB regional revenue query results" width="640">
-</p>
+Have fun building, and enjoy running an AWS pipeline that proves you can design scalable data systems while keeping costs low.
