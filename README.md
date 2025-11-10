@@ -9,7 +9,6 @@ An AWS-focused **data engineering pipeline** that ingests raw sales records, app
 
 ## Why it matters
 - **Real AWS story** – S3-based lakehouse, AWS Glue ETL, Athena SQL layer, and QuickSight-ready outputs.
-- **Cost-aware design** – serverless + pay-per-use services keep demo runs under a few dollars (or entirely free if you stay local).
 - **Modern patterns** – medallion layers, data quality checks, DuckDB development workflow, and an interactive Streamlit dashboard.
 
 ## Architecture at a glance

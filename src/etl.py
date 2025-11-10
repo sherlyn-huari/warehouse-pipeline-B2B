@@ -42,16 +42,6 @@ class SalesETL:
         self.dataset_slug = "rohitsahoo/sales-forecasting"
         self._setup_kaggle_credentials()
         logger.debug("SalesETL initialized with data directory: %s", self.data_dir.resolve())
-
-    # Data sourcing
-    def check_dataset(self) -> Optional[Path]:
-        """Check if we have the dataset if yes return the df if not return a message saying that we are going to donwload the info"""
-        train_csv = self.data_dir / "train.csv"
-        if train_csv.exists():
-            logger.debug("Existing dataset found at %s; skipping download.", self.target_csv)
-            return train_csv
-        logger.info("Dataset not found; proceeding download with Kaggle credentials")
-        return None
     
     def _setup_kaggle_credentials(self) -> None:
         """Load Kaggle credentials from .env (if present)."""
@@ -135,13 +125,16 @@ class SalesETL:
     def build_dataset(
         self,
         base_df: Optional[pd.DataFrame],
-        num_synthetic_rows: int = 10000,
+        num_synthetic_rows: int = 10_000,
         **kwargs,
     ) -> pd.DataFrame:
         """Combine Kaggle data with synthetic augmentation."""
         logger.info("Generating %s synthetic rows", num_synthetic_rows)
         synthetic_df = self.synthetic_generator.generate_synthetic_data(
                 num_rows=num_synthetic_rows, **kwargs )
+        
+        if hasattr(synthetic_df, "to_pandas"):
+            synthetic_df = synthetic_df.to_pandas()
 
         if base_df is not None:
             logger.info("Combining %s Kaggle rows with %s synthetic rows", len(base_df), len(synthetic_df))
@@ -226,7 +219,7 @@ class SalesETL:
         return summaries
 
     def run_quality_checks(self, df: pd.DataFrame) -> Dict[str, bool]:
-        """Run lightweight Great Expectations checks on critical columns."""
+        """Run Great Expectations checks on critical columns"""
         pandas_df = df
         context = ge.get_context()
         execution_engine = PandasExecutionEngine()
@@ -257,7 +250,7 @@ class SalesETL:
                 category=UserWarning,
             )
 
-            for column in ["order_id", "customer_id", "sales", "order_date"]:
+            for column in ["order_id", "customer_id", "sales", "order_date"]: # this test fail
                 if column in pandas_df.columns:
                     result = validator.expect_column_values_to_not_be_null(column)
                     expectations[f"{column}_not_null"] = bool(result.success)
@@ -331,17 +324,22 @@ class SalesETL:
     # Entry point
     def run(
         self,
-        csv_path: Optional[str | Path] = None,
-        num_synthetic_rows: int = 5_000,
+        num_synthetic_rows: int = 10_000,
         **kwargs,
     ) -> pd.DataFrame:
         """Execute the full pipeline."""
-        if csv_path is None:
-            csv_candidate = self.download_kaggle_dataset()
-        else:
-            csv_candidate = Path(csv_path)
+        train_csv = self.data_dir / "train.csv"
 
-        base_df = self.load_base_dataset(csv_candidate)
+        if train_csv.exists():
+            csv = Path(train_csv)
+        else:
+            self._setup_kaggle_credentials()
+            csv = self.download_kaggle_dataset()
+        
+        if csv is None:
+            raise ValueError("Failed to obtain dataset from Kaggle")
+
+        base_df = self.load_base_dataset(csv)
         combined_df = self.build_dataset(base_df, num_synthetic_rows=num_synthetic_rows, **kwargs)
         transformed_df = self.transform(combined_df)
         summaries = self.build_summaries(transformed_df)
@@ -353,5 +351,5 @@ class SalesETL:
 
 
 if __name__ == "__main__":
-    etl = SalesETL(data_dir="data")
+    etl = SalesETL()
     etl.run()
