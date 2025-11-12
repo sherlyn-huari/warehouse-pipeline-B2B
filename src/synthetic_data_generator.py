@@ -155,19 +155,17 @@ class SyntheticDataGenerator:
             if "Product Name" in original_df.columns:
                 try:
                     product_names = (
-                        original_df.select("Product Name")
-                        .unique()
-                        ["Product Name"]
-                        .to_list()
+                        original_df.select("Product Name").unique()
+                        ["Product Name"].to_list()
                     )
-                except Exception as exc:  # pragma: no cover - defensive
+                except Exception as exc: 
                     logger.warning("Could not extract product names: %s", exc)
             if "Row ID" in original_df.columns:
                 try:
                     start_row_id = int(
                         original_df.select(pl.col("Row ID").max()).item()
                     ) + 1
-                except Exception as exc:  # pragma: no cover - defensive
+                except Exception as exc:
                     logger.warning("Could not determine starting Row ID: %s", exc)
 
         if not product_names:

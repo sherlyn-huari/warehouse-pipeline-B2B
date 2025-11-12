@@ -153,12 +153,16 @@ class SalesETL:
         transformed = df.rename(columns=rename_map).copy()
 
         if "order_date" in transformed.columns:
-            transformed["order_date"] = pd.to_datetime(transformed["order_date"], errors="coerce")
+            transformed["order_date"] = pd.to_datetime(transformed["order_date"], errors="coerce", dayfirst=True)
+            null_mask = transformed["order_date"].isna()
+            if null_mask.any():
+                logger.warning("Found %s rows with invalid order_date values", null_mask.sum())
+
             transformed["order_year"] = transformed["order_date"].dt.year
             transformed["order_month"] = transformed["order_date"].dt.month
 
         if "ship_date" in transformed.columns:
-            transformed["ship_date"] = pd.to_datetime(transformed["ship_date"], errors="coerce")
+            transformed["ship_date"] = pd.to_datetime(transformed["ship_date"], errors="coerce", dayfirst=True)
 
         if "order_date" in transformed.columns and "ship_date" in transformed.columns:
             transformed["ship_latency_days"] = (transformed["ship_date"] - transformed["order_date"]).dt.days
@@ -352,4 +356,7 @@ class SalesETL:
 
 if __name__ == "__main__":
     etl = SalesETL()
-    etl.run()
+    try:
+        etl.run()
+    except ValueError as exc:
+        logger.error("Pipeline aborted: %s", exc)
