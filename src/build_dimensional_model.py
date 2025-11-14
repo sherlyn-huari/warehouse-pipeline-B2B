@@ -1,5 +1,5 @@
 """
-Build Dimensional Model (Star Schema) from Denormalized Sales data
+Build Dimensional Model (Star Schema) from Sales data
 - Fact table: fact_sales
 - Dimension tables: dim_customer, dim_product, dim_location, dim_date
 """

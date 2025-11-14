@@ -46,6 +46,28 @@ What happens:
 - `data/output/sales_analytics.duckdb` – warehouse-style tables mirroring the gold layer.
 - `etl_pipeline.log` – run history (info/warnings/errors).
 
+## Warehouse Dimension
+The DuckDB warehouse implements a **star schema** optimized for analytical queries, with `fact_sales` at the center surrounded by four dimension tables.
+
+```
+        dim_customer
+              |
+dim_date ── fact_sales ── dim_product
+              |
+        dim_location
+```
+
+### Dimension Tables
+- **dim_customer** – Unique customers with attributes (customer_id, name, segment). Indexed on customer_id.
+- **dim_product** – Product catalog hierarchy (product_id, name, category, sub_category). Indexed on product_id.
+- **dim_location** – Geographic hierarchy (city, state, postal_code, region, country). Indexed on region and state.
+- **dim_date** – Date dimension with calendar attributes (year, month, week, month_name). Auto-generated for all dates in sales range.
+
+### Fact Table
+- **fact_sales** – Grain: one row per order line. Contains foreign keys to all dimensions plus measures (sales_amount, quantity, unit_price, ship_latency_days). Enforces referential integrity with foreign key constraints and includes indexes on all dimension keys for fast joins.
+
+Run `python src/build_dimensional_model.py` after the ETL to create the star schema.
+
 ## Streamlit Dashboard
 ```bash
 source .venv/bin/activate
