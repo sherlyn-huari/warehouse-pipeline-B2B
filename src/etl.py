@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, Optional
 import duckdb
 import pandas as pd
+from datetime import date
 import kagglehub
 import great_expectations as ge
 from dotenv import load_dotenv
@@ -46,7 +47,7 @@ class SalesETL:
         load_dotenv()
         missing: list[str] = []
 
-        for var in ("KAGGLE_USERNAME", "KAGGLE_USERNAME"):
+        for var in ("KAGGLE_USERNAME", "KAGGLE_KEY"):
             value = os.getenv(var)
             if value:
                 os.environ[var] = value
@@ -55,7 +56,7 @@ class SalesETL:
 
         if missing:
             logger.warning(
-                "Missing Kaggle credential(s): %s; dataset download may fail.",
+                "Missing Kaggle credential(s): %s; dataset download may fail",
                 ", ".join(missing),
             )
         else:
@@ -117,6 +118,9 @@ class SalesETL:
         rows_removed = initial_rows - len(df)
         logger.info("Removed %s rows containing null values", rows_removed)
 
+        removed_columns = ["Row ID","Order ID","Order Date", "Ship Date"]
+        df = df.drop(removed_columns, axis =1)
+        logger.info("Removed columns: %s  ", removed_columns)
         return df
     
     def load_base_dataset(self, csv_path: Path) -> Optional[pd.DataFrame]:
@@ -132,36 +136,27 @@ class SalesETL:
         self,
         base_df: Optional[pd.DataFrame],
         num_synthetic_rows: int = 10_000,
-        **kwargs,
+        start_date = date(2024,1,1),
+        end_date = date(2025,1,1)
     ) -> pd.DataFrame:
-        """Combine kaggle data with synthetic data"""
-
-        if base_df is not None:
-            base_df_pl = pl.from_pandas(base_df)
-        else:
-            base_df_pl = None
-
-        synthetic_df = self.synthetic_generator.generate_synthetic_data(
-                original_df=base_df_pl, num_rows=num_synthetic_rows, **kwargs )
+        """Combine kaggle data where order_date it is in the year of 2017 or major 
+          with synthetic data"""
         
-        if isinstance(synthetic_df, pl.DataFrame):
-            synthetic_rows = synthetic_df.height
-            synthetic_df = synthetic_df.to_pandas()
-        else:
-            raise TypeError("Synthetic generator returned unsupported type "
-                    f"{type(synthetic_df).__name__}")
-
-        if base_df is None:
-            logger.info(
-                "No kaggle base data provided; returning %s synthetic rows only",
-                synthetic_rows,
-            )
-            return synthetic_df
+        update_df  = self.synthetic_generator.update_data( kaggle_df= base_df,start_date = start_date, end_date=end_date)
+        synthetic_df = self.synthetic_generator.generate_synthetic_data( 
+                num_rows=num_synthetic_rows,start_date = start_date, end_date=end_date ) # Here  add the updated date function and add row_id coumn 
+        
+        updated_rows = update_df.height
+        synthetic_rows = synthetic_df.height
 
         logger.info("Combining %s Kaggle rows with %s synthetic rows",
-                    len(base_df), synthetic_rows)
+                    updated_rows, synthetic_rows)
+        
+        combined = pl.concat([update_df, synthetic_df], how="vertical")
 
-        return pd.concat([base_df, synthetic_df], ignore_index=True)
+        # add the Row ID
+        combined = combined.with_columns( pl.arange(1, combined.height() + 1).alias("row_id"))
+        return combined
     
     def add_quantity(self, df: pd.DataFrame,  min_amount: int = 1 , max_amount: int = 999, seed: int | None = None) -> pd.DataFrame:
         """Add a quantity column"""
@@ -204,7 +199,7 @@ class SalesETL:
         return transformed
 
     def build_summaries(self, df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
-        """Create summary tables for analytics and reporting."""
+        """Create summary tables for analytics"""
         summaries: Dict[str, pd.DataFrame] = {}
 
         if "order_year" in df.columns:
@@ -326,7 +321,7 @@ class SalesETL:
         df: pd.DataFrame,
         summaries: Dict[str, pd.DataFrame],
     ) -> None:
-        """Load datasets into DuckDB for interactive analytics."""
+        """Load datasets into DuckDB"""
         with duckdb.connect(str(self.warehouse_path)) as conn:
             conn.execute("CREATE SCHEMA IF NOT EXISTS analytics")
             import pyarrow as pa
@@ -353,7 +348,7 @@ class SalesETL:
         num_synthetic_rows: int = 10_000,
         **kwargs,
     ) -> pd.DataFrame:
-        """Execute the full pipeline."""
+        """Execute the pipeline"""
         train_csv = self.input_dir / "train.csv"
 
         if train_csv.exists():

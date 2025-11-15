@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 import numpy as np
 import polars as pl
+import pandas as pd
 from faker import Faker
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,7 @@ class SyntheticDataGenerator:
             product_catalog = json.load(f)
         category = random.choice(list(product_catalog.keys()))
         sub_category = random.choice(list(product_catalog[category].keys()))
-        product = random.choice(product_catalog[category][sub_category])
+        product = random.choice(list(product_catalog[category][sub_category]))
         return {"Category": category, "Sub-Category": sub_category,"Product": product }
 
     def generate_order_id(self, order_date: datetime) -> str:
@@ -134,31 +135,36 @@ class SyntheticDataGenerator:
         sub_abbr = subcategory[:2].upper()
         return f"{cat_abbr}-{sub_abbr}-100{random.randint(10000, 99999)}"
     
+    def update_data(self, kaggle_df: Optional[pd.DataFrame], start_date: date=date(2024,1,1), end_date: date=date(2025,1,1))-> pl.DataFrame:
+        logger.info("loading data from Kaggle for an update of dates")
+
+        kaggle_df = pl.from_pandas(kaggle_df)
+        num_rows = kaggle_df.height()
+
+        order_ship_pairs= [self.generate_order_dates(start_date=start_date, end_date=end_date)
+                             for i in range(num_rows)]
+        order_dates = [pair[0] for pair in order_ship_pairs]
+        ship_dates = [pair[1] for pair in order_ship_pairs]
+        order_ids = [self.generate_order_id(d) for d in order_dates ]
+        
+        logger.info("Successfully updated the date in %s rows in the kaggle dataset", num_rows)
+        
+        kaggle_df = kaggle_df.with_columns([
+            pl.Series("Order Date", order_dates),
+            pl.Series("Ship Date", ship_dates),
+            pl.Series("Order ID", order_ids)
+        ])
+        return kaggle_df
+    
     def generate_synthetic_data(
         self,
-        original_df: Optional[pl.DataFrame] = None,
         num_rows: int = 100_000,
-        start_date: date = date(2015, 1, 1),
-        end_date: date = date(2018, 12, 31),
+        start_date: date = date(2024, 1, 1),
+        end_date: date = date(2025, 12, 31),
     ) -> pl.DataFrame:
         """Generate synthetic sales records"""
 
         logger.info("Generating %s synthetic rows...", num_rows)
-
-        start_row_id = 1
-
-        if original_df is not None and len(original_df) > 0:
-            if "Row ID" in original_df.columns:
-                try:
-                    start_row_id = int(
-                        original_df.select(pl.col("Row ID").max()).item()
-                    ) + 1
-                except Exception as exc:
-                    logger.warning("Could not determine starting Row ID: %s", exc)
-        else:
-            logger.info(
-                "No base dataset provided; generating synthetic rows using defaults"
-            )
 
         synthetic_rows = []
 
@@ -174,7 +180,6 @@ class SyntheticDataGenerator:
             sales = self.generate_sales_amount(min_amount=10, max_amount=2900)
 
             row = {
-                "Row ID": start_row_id + i,
                 "Order ID": order_id,
                 "Order Date": order_date,
                 "Ship Date": ship_date,

@@ -27,7 +27,7 @@ class DimensionalModelBuilder:
 
     def create_dim_customer(self) -> None:
         """
-        Create customer dimension table: This table stores unique customers with their attributes.
+        Create customer dimension table
         """
         logger.info("Creating dim_customer")
 
