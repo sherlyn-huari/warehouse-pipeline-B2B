@@ -29,18 +29,15 @@ class SalesETL:
     def __init__(
         self,
         input_dir: str | Path = "data/input",
-        output_dir: str | Path = "data/output",
-        synthetic_data_dir: str | Path = "data/synthetic",
+        output_dir: str | Path = "data/output"
     ) -> None:
         
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
-        self.synthetic_data_dir = Path(synthetic_data_dir)
         self.warehouse_path = self.output_dir / "warehouse" / "sales_analytics.duckdb"
 
         self.input_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.synthetic_data_dir.mkdir(parents=True, exist_ok=True)
         self.warehouse_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.synthetic_generator = SyntheticDataGenerator(input_dir=self.input_dir)
@@ -70,7 +67,6 @@ class SalesETL:
         synthetic_df = self.synthetic_generator.generate_synthetic_data(
                 num_rows=num_synthetic_rows,start_date = start_date, end_date=end_date )
 
-        synthetic_df = synthetic_df.to_pandas()
         logger.info("Creating a total of  %s  synthetic rows and %s columns ",
                     len(synthetic_df), len(synthetic_df.columns))
 
@@ -145,15 +141,16 @@ class SalesETL:
                 .sort_values("total_revenue", ascending=False)
             )
 
-        if {"product_name", "revenue"}.issubset(df.columns):
+        if {"category", "product_name", "revenue"}.issubset(df.columns):
             summaries["top_products"] = (
-                df.groupby("product_name", as_index=False)
+                df.groupby(["category", "product_name"], as_index=False)
                 .agg(
-                    total_revenue=("revenue", lambda x: round(x.sum(), 2)),
-                    total_orders=("product_name", "count"),
+                    total_revenue=("revenue", lambda x: round(x.sum(), 2))
                 )
-                .sort_values("total_revenue", ascending=False)
-                .head(5)
+                .sort_values(["category","total_revenue"], ascending=[True, False])
+                .groupby("category")
+                .head(3)
+                .reset_index(drop= True)
             )
 
         logger.info("Built %s summary tables", len(summaries))
@@ -161,13 +158,12 @@ class SalesETL:
 
     def run_quality_checks(self, df: pd.DataFrame) -> Dict[str, bool]:
         """Run Great Expectations checks on critical columns"""
-        pandas_df = df
         context = ge.get_context()
         execution_engine = PandasExecutionEngine()
         execution_engine.data_context = context
 
-        batch_data = execution_engine.get_batch_data( 
-            RuntimeDataBatchSpec(batch_data=pandas_df)
+        batch_data = execution_engine.get_batch_data(
+            RuntimeDataBatchSpec(batch_data=df)
         )
         batch = Batch(data=batch_data, data_context=context)
         suite = ExpectationSuite("sales_quality_checks")
@@ -192,28 +188,28 @@ class SalesETL:
             )
 
             for column in ["order_id", "customer_id", "price", "order_date"]:
-                if column in pandas_df.columns:
+                if column in df.columns:
                     result = validator.expect_column_values_to_not_be_null(column)
                     expectations[f"{column}_not_null"] = bool(result.success)
 
-            if "price" in pandas_df.columns:
+            if "price" in df.columns:
                 result = validator.expect_column_values_to_be_between(
-                    "price", min_value=0, strict_min=True
-                )
+                    "price", min_value=0, strict_min=True)
                 expectations["sales_positive"] = bool(result.success)
-                
-            if "quantity" in pandas_df.columns:
+
+            if "discount" in df.columns:
                 result = validator.expect_column_values_to_be_between(
-                    "quantity", min_value = 1 , max_value = 100
-                )
+                    "discount", min_value = 0, max_value = 0.5)
+
+            if "quantity" in df.columns:
+                result = validator.expect_column_values_to_be_between(
+                    "quantity", min_value = 1, max_value = 100)
                 expectations["quantity_in_range"] = bool(result.success)
 
-            if "order_year" in pandas_df.columns:
-                result = validator.expect_column_values_to_be_between(
-                    "order_year",
-                    min_value=int(df["order_year"].min()),
-                    max_value=int(df["order_year"].max()),
-                )
+            if "order_year" in df.columns:
+                result = validator.expect_column_values_to_be_between( "order_year",
+                        min_value=int(df["order_year"].min()),
+                        max_value=int(df["order_year"].max()))
                 expectations["order_year_valid_range"] = bool(result.success)
 
         expectations["overall_success"] = all(expectations.values())
@@ -248,13 +244,11 @@ class SalesETL:
     def load_into_warehouse(
         self,
         transformed_df: pd.DataFrame,
-        build_star_schema: bool = True,
-    ) -> None:
-        """Load transformed data and dimensional model into DuckDB"""
+        build_star_schema: bool = True ) -> None:
+        """Load transformed data and dimensional model (start model) into DuckDB"""
+
         with duckdb.connect(str(self.warehouse_path)) as conn:
             conn.execute("CREATE SCHEMA IF NOT EXISTS analytics")
-
-            logger.info("Loading transformed data into warehouse (%d rows)", len(transformed_df))
             arrow_table = pa.Table.from_pandas(transformed_df)
             conn.register("sales_data", arrow_table)
             conn.execute(
@@ -264,13 +258,11 @@ class SalesETL:
 
         logger.info("Loaded analytics.sales into %s", self.warehouse_path)
 
-        # Build dimensional model
         if build_star_schema:
-            logger.info("Building dimensional model (star schema)")
             try:
                 with DimensionalModelBuilder(warehouse_path=self.warehouse_path) as builder:
                     builder.build_all()
-                logger.info("Dimensional model built successfully")
+                logger.info("Dimensional model (star schema) built successfully")
             except Exception as exc:
                 logger.error("Failed to build dimensional model: %s", exc)
                 logger.warning("Continuing without dimensional model")
@@ -292,6 +284,12 @@ class SalesETL:
         )
         cleaned_df = self.clean_data(combined_df)
         transformed_df = self.transform(cleaned_df)
+
+        # Save transformed data with calculated columns (revenue, etc.)
+        transformed_path = self.output_dir / "synthetic_data.parquet"
+        transformed_df.to_parquet(transformed_path)
+        logger.info("Saved transformed dataset to %s", transformed_path)
+
         summaries = self.build_summaries(transformed_df)
         quality_results = self.run_quality_checks(transformed_df)
         self.persist_outputs(transformed_df, summaries, quality_results)

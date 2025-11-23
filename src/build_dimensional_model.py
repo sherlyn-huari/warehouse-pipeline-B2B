@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 
 class DimensionalModelBuilder:
 
-    def __init__(self, warehouse_path: str | Path = "data/output/sales_analytics.duckdb"):
+    def __init__(self, warehouse_path: str | Path = "data/output/warehouse/sales_analytics.duckdb"):
         self.warehouse_path = Path(warehouse_path)
-        if not self.warehouse_path.exists():
-            raise FileNotFoundError(f"Warehouse not found: {self.warehouse_path}")
+        # Create parent directory if it doesn't exist
+        self.warehouse_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.conn = duckdb.connect(str(self.warehouse_path))
         logger.info("Connected to warehouse: %s", self.warehouse_path)
@@ -36,8 +36,7 @@ class DimensionalModelBuilder:
             customer_key INTEGER PRIMARY KEY,
             customer_id VARCHAR,
             customer_name VARCHAR,
-            segment VARCHAR,
-            purchasing_frequency VARCHAR
+            segment VARCHAR
         );
 
         INSERT INTO analytics.dim_customer
@@ -46,13 +45,11 @@ class DimensionalModelBuilder:
             customer_id,
             customer_name,
             segment,
-            purchasing_frequency
         FROM (
             SELECT DISTINCT
                 customer_id,
                 customer_name,
-                segment,
-                purchasing_frequency
+                segment
             FROM analytics.sales
             WHERE customer_id IS NOT NULL
         ) unique_customers;
@@ -299,7 +296,6 @@ class DimensionalModelBuilder:
         print("\n Row Counts:")
         print(counts.T.to_string())
 
-        # Validate key in each fact table
         orphan_check = self.conn.execute("""
             SELECT
                 COUNT(*) as total_rows,
@@ -321,7 +317,6 @@ class DimensionalModelBuilder:
                 p.category,
                 COUNT(*) as order_count,
                 SUM(f.sales_amount) as total_revenue,
-                AVG(f.sales_amount) as avg_sale,
                 SUM(f.quantity) as total_quantity
             FROM analytics.fact_sales f
             JOIN analytics.dim_location l ON f.location_key = l.location_key

@@ -1,6 +1,10 @@
-product_name,total_revenue,total_orders
-Basic Printer,3236166.04,2540
-Color Toner Cartridge,2292841.71,2531
-Office Shredder,2071689.01,2609
-Black Toner Cartridge,1872508.96,2627
-Adjustable Standing Desk,1777485.94,2546
+category,product_name,total_revenue
+Furniture,Simple Office Desk,1929166.51
+Furniture,4-Drawer Filing Cabinet,1634444.6
+Furniture,Adjustable Standing Desk,1594162.91
+Office Supplies,Bubble Mailers (12-pack),883903.74
+Office Supplies,Color Copy Paper Pack,805643.85
+Office Supplies,Address Labels (300 count),700585.98
+Technology,Basic Printer,7206996.75
+Technology,Office Shredder,4398386.13
+Technology,Color Toner Cartridge,3344775.36

@@ -83,8 +83,7 @@ class SyntheticDataGenerator:
                 used_ids.add(customer_id)
                 self.customers[customer_id] = {
                     'name': name,
-                    'segment': random.choice(self.SEGMENTS),
-                    'purchasing_frequency': random.choice(['Monthly', 'Quarterly', 'Bi-Annually'])
+                    'segment': random.choice(self.SEGMENTS)
                 }
         else:
             excess_count = len(self.customers) - num_customers
@@ -125,7 +124,6 @@ class SyntheticDataGenerator:
 
     def generate_product_details(self) -> dict[str, str]:
         """Generate category and sub_category"""
-        # Load catalog only once and cache it
         if self._product_catalog is None:
             catalog_path = self.input_dir / "product_catalog.json"
             with catalog_path.open("r") as f:
@@ -201,7 +199,6 @@ class SyntheticDataGenerator:
                 "ship_mode": ship_mode,
                 "customer_id": customer_id,
                 "customer_name": customer_data['name'],
-                "purchasing_frequency": customer_data['purchasing_frequency'],
                 "segment": customer_data['segment'],
                 "city": location["City"],
                 "state": location["State"],
