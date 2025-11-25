@@ -1,5 +1,3 @@
-"""Streamlit dashboard """
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,11 +8,6 @@ import streamlit as st
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "output"
 PARQUET_PATH = DATA_DIR / "synthetic_data.parquet"
-YEARLY_CSV = DATA_DIR / "yearly.csv"
-SEGMENT_CSV = DATA_DIR / "segment_yearly.csv"
-REGION_CSV = DATA_DIR / "regional_revenue.csv"
-TOP_PRODUCTS_CSV = DATA_DIR / "top_products.csv"
-
 
 @st.cache_data(show_spinner=False)
 def load_dataset() -> pl.DataFrame:
@@ -43,18 +36,6 @@ def main() -> None:
         st.stop()
         return
 
-    total_rows = len(dataset)
-    total_revenue = dataset["revenue"].sum()
-    unique_customers = dataset["customer_id"].n_unique()
-    unique_products = dataset["product_id"].n_unique()
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Rows", f"{total_rows:,}")
-    col2.metric("Total Revenue", f"${total_revenue:,.0f}")
-    col3.metric("Unique Customers", f"{unique_customers:,}")
-    col4.metric("Unique Products", f"{unique_products:,}")
-
-
     st.sidebar.header("Filters")
 
     all_years = sorted(dataset["order_year"].unique().to_list())
@@ -78,7 +59,6 @@ def main() -> None:
         format_func=lambda x: month_names[x]
     )
 
-    # Apply filters
     filtered_dataset = dataset.filter(
         (pl.col("order_year").is_in(selected_years)) &
         (pl.col("order_month").is_in(selected_months))
@@ -87,8 +67,23 @@ def main() -> None:
     if len(filtered_dataset) > 0:
         st.sidebar.metric("Filtered Rows", f"{len(filtered_dataset):,}")
         st.sidebar.metric("Filtered Revenue", f"${filtered_dataset['revenue'].sum():,.0f}")
+
+    total_revenue = filtered_dataset["revenue"].sum()
+    total_orders = len(filtered_dataset)
+    total_quantity = filtered_dataset["quantity"].sum()
+    unique_customers = filtered_dataset["customer_id"].n_unique()
+    unique_products = filtered_dataset["product_id"].n_unique()
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("Total Revenue", f"${format_number(total_revenue)}")
+    col2.metric("Total Orders", f"{format_number(total_orders)}")
+    col3.metric("Total Quantity", f"{format_number(total_quantity)}")
+    col4.metric("Unique Customers", f"{format_number(unique_customers)}")
+    col5.metric("Unique Products", f"{format_number(unique_products)}")
+
+    left, right = st.columns(2)
         
-    with st.container():
+    with left:
         st.subheader("Revenue by Month")
         if filtered_dataset is not None and len(filtered_dataset) > 0:
             monthly_revenue = (
@@ -105,42 +100,9 @@ def main() -> None:
                 .mark_line(point=True)
                 .encode(
                     x=alt.X("year_month:O", title="Month", axis=alt.Axis(labelAngle=-45)),
-                    y=alt.Y("total_revenue:Q", title="Revenue", axis=alt.Axis(format="$,.0f")),
+                    y=alt.Y("total_revenue:Q", title="Revenue", axis=alt.Axis(format="$.2s")),
                     tooltip=[
                         alt.Tooltip("year_month:O", title="Month"),
-                        alt.Tooltip("total_revenue:Q", title="Revenue", format="$,.0f")
-                    ]
-                )
-                .properties(height=350)
-            )
-            st.altair_chart(chart, use_container_width=True)
-        else:
-            st.info("Run the ETL pipeline to populate this chart.")
-
-    left, right = st.columns(2)
-
-    with left:
-        st.subheader("Revenue by Category and Month")
-        if filtered_dataset is not None and len(filtered_dataset) > 0:
-            category_monthly = (
-                filtered_dataset.group_by(["order_year", "order_month", "category"])
-                .agg(pl.col("revenue").sum().alias("total_revenue"))
-                .sort(["order_year", "order_month"])
-            )
-            category_monthly = category_monthly.with_columns(
-                (pl.col("order_year").cast(str) + "-" + pl.col("order_month").cast(str).str.zfill(2)).alias("year_month")
-            )
-
-            chart = (
-                alt.Chart(category_monthly.to_pandas())
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("year_month:O", title="Month", axis=alt.Axis(labelAngle=-45)),
-                    y=alt.Y("total_revenue:Q", title="Revenue", axis=alt.Axis(format="$,.0f")),
-                    color=alt.Color("category:N", title="Category"),
-                    tooltip=[
-                        alt.Tooltip("year_month:O", title="Month"),
-                        alt.Tooltip("category:N", title="Category"),
                         alt.Tooltip("total_revenue:Q", title="Revenue", format="$,.0f")
                     ]
                 )
@@ -148,134 +110,193 @@ def main() -> None:
             )
             st.altair_chart(chart, use_container_width=True)
         else:
-            st.info("Category data unavailable.")
+            st.info("Run the ETL pipeline to populate this chart")
 
     with right:
-        st.subheader("Quantity Sold by Ship Mode and Year")
+        st.subheader("Orders by Month")
         if filtered_dataset is not None and len(filtered_dataset) > 0:
-            shipmode_yearly = (
-                filtered_dataset.group_by(["ship_mode", "order_year"])
-                .agg(pl.col("quantity").sum().alias("total_quantity"))
-                .sort(["order_year", "ship_mode"])
+            monthly_orders = ( filtered_dataset.group_by(["order_year", "order_month"])
+                              .agg(pl.col("order_id").count().alias("total_orders"))
+                              .sort(["order_year", "order_month"])
+                            )
+            monthly_orders = monthly_orders.with_columns(
+            (pl.col("order_year").cast(str) + "-" + pl.col("order_month").cast(str).str.zfill(2)).alias("year_month")
             )
-
-            shipmode_pivot = shipmode_yearly.to_pandas().pivot(
-                index='ship_mode',
-                columns='order_year',
-                values='total_quantity'
-            ).fillna(0)
-
-            st.dataframe(
-                shipmode_pivot.style.format("{:,.0f}"),
-                use_container_width=True
-            )
-        else:
-            st.info("Ship mode data unavailable.")
-
-    st.subheader("Revenue by Segment and Year")
-    if filtered_dataset is not None and len(filtered_dataset) > 0:
-
-        segment_data = (
-            filtered_dataset.group_by(["segment", "order_year"])
-            .agg(pl.col("revenue").sum().alias("total_revenue"))
-        )
-
-        segment_pivot = segment_data.to_pandas().pivot(
-            index='segment',
-            columns='order_year',
-            values='total_revenue'
-        ).fillna(0)
-        st.dataframe(
-            segment_pivot.style.format("${:,.0f}"),
-            use_container_width=True
-        )
-    else:
-        st.info("Segment-level data unavailable.")
-
-
-    col_left, col_right = st.columns(2)
-
-    with col_left:
-        st.subheader("Top 3 Cities by Revenue")
-        if filtered_dataset is not None and len(filtered_dataset) > 0:
-            top_cities = (
-                filtered_dataset.group_by("city")
-                .agg(pl.col("revenue").sum().alias("total_revenue"))
-                .sort("total_revenue", descending=True)
-                .head(3)
-                .to_pandas()
-            )
-            top_cities['total_revenue'] = top_cities['total_revenue'].apply(lambda x: f"${x:,.0f}")
-            top_cities = top_cities.rename(columns={
-                'city': 'City',
-                'total_revenue': 'Revenue'
-            })
-            st.dataframe(top_cities, use_container_width=True)
-        else:
-            st.info("City data unavailable.")
-
-    with col_right:
-        st.subheader("Quantity Sold by Segment and Month")
-        if filtered_dataset is not None and len(filtered_dataset) > 0:
-            segment_quantity = (
-                filtered_dataset.group_by(["segment", "order_year", "order_month"])
-                .agg(pl.col("quantity").sum().alias("total_quantity"))
-                .sort(["order_year", "order_month"])
-            )
-
-            segment_quantity = segment_quantity.with_columns(
-                (pl.col("order_year").cast(str) + "-" + pl.col("order_month").cast(str).str.zfill(2)).alias("year_month")
-            )
-
-            segment_df = segment_quantity.to_pandas()
-            segment_df['quantity_k'] = segment_df['total_quantity'] / 1000
-
             chart = (
-                alt.Chart(segment_df)
+                alt.Chart(monthly_orders.to_pandas())
                 .mark_line(point=True)
                 .encode(
                     x=alt.X("year_month:O", title="Month", axis=alt.Axis(labelAngle=-45)),
-                    y=alt.Y("quantity_k:Q", title="Quantity Sold (K)", axis=alt.Axis(format=".1f")),
+                    y=alt.Y("total_orders:Q", title="Orders"),
+                    tooltip=[
+                        alt.Tooltip("year_month:O", title="Month"),
+                        alt.Tooltip("total_orders:Q", title="Orders", format=",d")
+                    ]
+                )
+                .properties(height=300)
+            )
+            st.altair_chart(chart, use_container_width=True)
+        else:
+            st.info("Run the ETL pipeline to populate this chart")
+
+
+    with left:
+        st.subheader("Revenue by Segment")
+        if filtered_dataset is not None and len(filtered_dataset) > 0:
+            segment_revenue = (
+                filtered_dataset.group_by(["order_year","order_month","segment"])
+                .agg(pl.col("revenue").sum().alias("total_revenue"))
+                .sort(["order_year", "order_month"])
+            )
+
+            segment_revenue = segment_revenue.with_columns(
+                (pl.col("order_year").cast(str) + "-" + pl.col("order_month").cast(str).str.zfill(2)).alias("year_month")
+            )
+
+            chart = (
+                alt.Chart(segment_revenue.to_pandas())
+                .mark_line(point = True)
+                .encode(
+                    x=alt.X("year_month:O", title="Month", axis=alt.Axis(labelAngle=-45)),
+                    y=alt.Y("total_revenue:Q", title="Revenue", axis=alt.Axis(format="$,.0f")),
                     color=alt.Color("segment:N", title="Segment"),
                     tooltip=[
                         alt.Tooltip("year_month:O", title="Month"),
-                        alt.Tooltip("segment:N", title="Segment"),
-                        alt.Tooltip("total_quantity:Q", title="Quantity", format=",")
+                        alt.Tooltip("total_revenue:Q", title="Revenue", format="$,.0f"),
+                        alt.Tooltip("segment:N", title="Segment")
                     ]
                 )
                 .properties(height=300)
             )
             st.altair_chart(chart, use_container_width=True)
         else:
-            st.info("Segment data unavailable.")
+            st.info("Segment-level data unavailable")
 
-    st.subheader("Top 5 Products")
-    if filtered_dataset is not None and len(filtered_dataset) > 0:
+    with right:
+        st.subheader("Top 10 customer by Revenue")
+        if filtered_dataset is not None and len(filtered_dataset) > 0:
+            top_customers = (
+                filtered_dataset.group_by("customer_name")
+                .agg([
+                    pl.col("revenue").sum().alias("total_revenue"),
+                    pl.col("order_id").n_unique().alias("total_orders"),
+                    pl.col("quantity").sum().alias("total_quantity")
+                ])
+                .sort("total_revenue", descending=True)
+                .head(10)
+                .to_pandas()
+            )
+            top_customers['total_revenue'] = top_customers['total_revenue'].apply(lambda x: f"${x:,.0f}")
+            top_customers['total_orders'] = top_customers['total_orders'].apply(lambda x: f"{x:,}")
+            top_customers['total_quantity'] = top_customers['total_quantity'].apply(lambda x: f"{x:,}")
+            top_customers = top_customers.rename(columns={
+                'customer_name': 'Customer',
+                'total_revenue': 'Revenue',
+                'total_orders': 'Orders',
+                'total_quantity': 'Quantity'
+            })
+            st.dataframe(top_customers, use_container_width=True, height=300, hide_index=True)
+        else:
+            st.info("Customer data unavailable.")
 
-        top5_products = (
-            filtered_dataset.group_by(["category", "product_name"])
-            .agg([
-                pl.col("revenue").sum().alias("total_revenue"),
-                pl.col("quantity").sum().alias("total_quantity")
-            ])
-            .sort("total_revenue", descending=True)
-            .head(5)
-            .to_pandas()
-        )
+    with left:
+        st.subheader("Cities by Revenue")
+        if filtered_dataset is not None and len(filtered_dataset) > 0:
+            cities = (
+                filtered_dataset.group_by("city")
+                .agg(pl.col("revenue").sum().alias("total_revenue"))
+                .sort("total_revenue", descending=True)
+                .to_pandas()
+            )
+            cities['total_revenue'] = cities['total_revenue'].apply(lambda x: f"${x:,.0f}")
+            cities = cities.rename(columns={
+                'city': 'City',
+                'total_revenue': 'Revenue'
+            })
+            st.dataframe(cities, use_container_width=True, height=300, hide_index=True)
+        else:
+            st.info("City data unavailable.")
 
-        top5_products['total_revenue'] = top5_products['total_revenue'].apply(lambda x: f"${x:,.0f}")
-        top5_products['total_quantity'] = top5_products['total_quantity'].apply(lambda x: f"{x:,.0f}")
+    with right:
+        st.subheader("Revenue by Region")
+        if filtered_dataset is not None and len(filtered_dataset) > 0:
+            region_revenue = (
+                filtered_dataset.group_by("region")
+                .agg(pl.col("revenue").sum().alias("total_revenue"))
+                .sort("total_revenue", descending=True)
+                .to_pandas()
+            )
 
-        top5_products = top5_products.rename(columns={
-            'category': 'Category',
-            'product_name': 'Product',
-            'total_revenue': 'Revenue',
-            'total_quantity': 'Quantity Sold'
-        })
-        st.dataframe(top5_products, use_container_width=True)
+            chart = (
+                alt.Chart(region_revenue)
+                .mark_bar()
+                .encode(
+                    x=alt.X("total_revenue:Q", title="Revenue", axis=alt.Axis(format="$,.0f")),
+                    y=alt.Y("region:N", title="Region", sort="-x"),
+                    tooltip=[
+                        alt.Tooltip("region:N", title="Region"),
+                        alt.Tooltip("total_revenue:Q", title="Revenue", format="$,.0f")
+                    ]
+                )
+                .properties(height=300)
+            )
+            st.altair_chart(chart, use_container_width=True)
+        else:
+            st.info("Region data unavailable")
+
+    with left:
+        st.subheader("Revenue by Category")
+        if filtered_dataset is not None and len(filtered_dataset) > 0:
+            category_revenue = (
+                filtered_dataset.group_by("category")
+                .agg(pl.col("revenue").sum().alias("total_revenue"))
+                .sort("total_revenue", descending=True)
+                .to_pandas()
+            )
+            category_revenue['total_revenue'] = category_revenue['total_revenue'].apply(lambda x: f"${x:,.0f}")
+            category_revenue = category_revenue.rename(columns={
+                'category': 'Category',
+                'total_revenue': 'Revenue'
+            })
+            st.dataframe(category_revenue, use_container_width=True, height=300, hide_index=True)
+        else:
+            st.info("Category data unavailable")
+
+    with right:
+        st.subheader("Top 5 Products by Revenue")
+        if filtered_dataset is not None and len(filtered_dataset) > 0:
+            top_products = (
+                filtered_dataset.group_by(["category", "product_name"])
+                .agg([
+                    pl.col("revenue").sum().alias("total_revenue"),
+                    pl.col("quantity").sum().alias("total_quantity")
+                ])
+                .sort("total_revenue", descending=True)
+                .head(5)
+                .to_pandas()
+            )
+            top_products['total_revenue'] = top_products['total_revenue'].apply(lambda x: f"${x:,.0f}")
+            top_products['total_quantity'] = top_products['total_quantity'].apply(lambda x: f"{x:,.0f}")
+            top_products = top_products.rename(columns={
+                'category': 'Category',
+                'product_name': 'Product',
+                'total_revenue': 'Revenue',
+                'total_quantity': 'Quantity'
+            })
+            st.dataframe(top_products, use_container_width=True, height=300)
+        else:
+            st.info("Product data unavailable")
+
+
+def format_number(num):
+    if num >= 1_000_000_000:
+        return f"{num / 1_000_000_000:.1f}B"
+    elif num >= 1_000_000:
+        return f"{num / 1_000_000:.1f}M"
+    elif num >= 1_000:
+        return f"{num / 1_000:.1f}K"
     else:
-        st.info("Product-level summary unavailable.")
-
+        return f"{num:.0f}"
 
 if __name__ == "__main__":
     main()
