@@ -1,53 +1,120 @@
 # Smart Sales Analyzer
-ETL pipeline that blends Kaggle sales data with synthetic records, cleans and validates the dataset with Great Expectations, and stores curated outputs (CSV/Parquet + DuckDB) for analytics
 
-## What You Get
-- `src/etl.py` – full pipeline: download → clean → enrich → summaries → DuckDB.
-- `src/synthetic_data_generator.py` – deterministic faker-based data generator.
-- `src/dashboard.py` – Streamlit view over the gold tables.
-- `data/input`, `data/output` – landing spots for raw and processed files.
+End-to-end B2B retail analytics platform featuring an ETL pipeline, dimensional data warehouse, and interactive dashboard. Combines real Kaggle sales data with synthetic records, validates with Great Expectations, and delivers insights through Streamlit.
+
+## Features
+
+- **ETL Pipeline** – Automated data extraction, transformation, and loading with data quality checks
+- **Dimensional Modeling** – Star schema warehouse with fact and dimension tables in DuckDB
+- **Synthetic Data** – Deterministic faker-based generator for testing and development
+- **Interactive Dashboard** – Real-time filtering and 8+ visualizations for sales insights
+- **Data Validation** – Great Expectations integration for quality assurance
+
+## Project Structure
+
+```
+smart_sales_analyzer/
+├── src/
+│   ├── etl.py                          # Main ETL pipeline
+│   ├── synthetic_data_generator.py     # Synthetic data creation
+│   ├── build_dimensional_model.py      # Star schema builder
+│   └── dashboard.py                    # Streamlit dashboard
+├── data/
+│   ├── input/                          # Raw data files
+│   └── output/                         # Processed outputs & DuckDB
+└── requirements.txt                    # Python dependencies
+```
 
 ## Requirements
-- Python 3.10+ with `pip`.
-- Kaggle API credentials (optional: only needed to pull the base dataset).
-- 2‑3 GB of free disk space for DuckDB and CSV exports.
 
-## Setup
+- Python 3.10+
+- 2-3 GB free disk space
+- (Optional) Kaggle API credentials for dataset download
+
+## Quick Start
+
+### 1. Installation
+
 ```bash
 git clone <repo-url>
 cd smart_sales_analyzer
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
-If you want the Kaggle dataset automatically:
+
+### 2. Configure Kaggle (Optional)
+
+To automatically download the dataset:
 ```bash
-export KAGGLE_USERNAME=<your_user>
+export KAGGLE_USERNAME=<your_username>
 export KAGGLE_KEY=<your_api_key>
 ```
 
-## Run the Pipeline
+**Offline mode:** Place your own `train.csv` in `data/input/` to skip Kaggle download.
+
+### 3. Run ETL Pipeline
+
 ```bash
-source .venv/bin/activate
 python src/etl.py
 ```
-What happens:
-1. Looks for `data/input/train.csv`. If missing, tries to download it from Kaggle (falls back to synthetic-only if download is unavailable).
-2. Cleans the CSV, generates synthetic rows, and merges both sources.
-3. Runs transformations, summary aggregates, and Great Expectations checks.
-4. Writes outputs under `data/output/` and loads everything into `data/output/sales_analytics.duckdb`.
 
-> **Offline tip:** drop your own `train.csv` into `data/input/` before running and the pipeline will skip the Kaggle step.
+**Pipeline Steps:**
+1. **Extract** – Downloads Kaggle dataset or uses local `train.csv`
+2. **Clean** – Removes duplicates, handles nulls, validates data types
+3. **Enrich** – Generates and merges synthetic records
+4. **Validate** – Runs Great Expectations quality checks
+5. **Load** – Saves to Parquet, CSV, and DuckDB
+
+### 4. Build Data Warehouse
+
+```bash
+python src/build_dimensional_model.py
+```
+
+Creates star schema with dimension and fact tables in DuckDB.
+
+### 5. Launch Dashboard
+
+```bash
+streamlit run src/dashboard.py
+```
+
+Opens interactive dashboard at `http://localhost:8501`
+
+## Dashboard Features
+
+The Streamlit dashboard provides:
+
+- **KPI Metrics** – Revenue, Orders, Quantity, Customers, Products
+- **Filters** – Year and month selection
+- **Visualizations:**
+  - Revenue & Orders by Month (line charts)
+  - Revenue by Segment (multi-line chart)
+  - Top 10 Customers (table with revenue, orders, quantity)
+  - Cities by Revenue (sortable table)
+  - Revenue by Region (horizontal bar chart)
+  - Revenue by Category (table)
+  - Top 5 Products (table with category, revenue, quantity)
+
+All charts respond dynamically to filter selections!
 
 ## Outputs
-- `data/output/sales_enriched.parquet` – full cleaned dataset.
-- `data/output/yearly.csv`, `segment_yearly.csv`, `regional_revenue.csv`, `top_products.csv` – ready-to-chart aggregates.
-- `data/output/quality_report.json` – Great Expectations results.
-- `data/output/sales_analytics.duckdb` – warehouse-style tables mirroring the gold layer.
-- `etl_pipeline.log` – run history (info/warnings/errors).
 
-## Warehouse Dimension
-The DuckDB warehouse implements a **star schema**.
+| File | Description |
+|------|-------------|
+| `data/output/synthetic_data.parquet` | Full cleaned dataset |
+| `data/output/yearly.csv` | Yearly revenue aggregates |
+| `data/output/segment_yearly.csv` | Segment performance by year |
+| `data/output/regional_revenue.csv` | Revenue by region |
+| `data/output/top_products.csv` | Best-selling products |
+| `data/output/quality_report.json` | Data validation results |
+| `data/output/sales_analytics.duckdb` | Star schema warehouse |
+| `etl_pipeline.log` | Pipeline execution log |
+
+## Data Warehouse Schema
+
+Star schema implementation in DuckDB:
 
 ```
         dim_customer
@@ -58,18 +125,16 @@ dim_date ── fact_sales ── dim_product
 ```
 
 ### Dimension Tables
-- **dim_customer** – Unique customers with attributes (customer_id, name, segment). 
-- **dim_product** – Product catalog (product_id, name, category, sub_category).
-- **dim_location** – Geographic hierarchy (city, state, postal_code, region, country).
-- **dim_date** – Date dimension with calendar attributes (year, month, week, month_name). 
+
+| Table | Description | Key Attributes |
+|-------|-------------|----------------|
+| **dim_customer** | Customer master data | customer_id, name, segment |
+| **dim_product** | Product catalog | product_id, name, category, sub_category |
+| **dim_location** | Geographic hierarchy | city, state, postal_code, region, country |
+| **dim_date** | Calendar dimension | date, year, month, week, month_name |
 
 ### Fact Table
-- **fact_sales** – Contains foreign keys to all dimensions plus measures (sales_amount, quantity, unit_price, ship_latency_days).
 
-Run `python src/build_dimensional_model.py` after the ETL to create the star schema.
-
-## Streamlit Dashboard
-```bash
-source .venv/bin/activate
-streamlit run src/dashboard.py
-```
+**fact_sales** – Grain: One row per order line item
+- Foreign keys: customer_id, product_id, location_id, order_date
+- Measures: sales_amount, quantity, unit_price, ship_latency_days
