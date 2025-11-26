@@ -77,8 +77,8 @@ class SalesETL:
         return synthetic_df
 
     def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Clean and validate data before transformation
-        Handles nulls in critical columns to avoid issues during calculations
+        """Clean and validate data
+        Handles nulls in critical columns 
         """
         numeric_cols = ["price", "quantity", "discount"]
         for col in numeric_cols:
@@ -222,10 +222,15 @@ class SalesETL:
         summaries: Dict[str, pd.DataFrame],
         quality_results: Dict[str, bool],
     ) -> None:
-        """ Put inside the data/output directory the following 
-         - First 50 rows of the synthetic dataset  
-         - Summary tables
-         - Quality report """
+        """ Put inside the data/output directory the following
+         - Full dataset in parquet format (this file will not be in the github)
+         - Sample of te dataset: First 50 rows  
+         - CSV files: Summary tables
+         - Quality report of Great Expectations """
+        
+        df_path = self.output_dir / "synthetic_data.parquet"
+        df.to_parquet(df_path)
+        logger.info("Saved full dataset to %s", df_path)
         
         sample_df = df.head(50)
         sample_path = self.output_dir / "sample_data.csv"
@@ -284,11 +289,6 @@ class SalesETL:
         )
         cleaned_df = self.clean_data(combined_df)
         transformed_df = self.transform(cleaned_df)
-
-        # Save transformed data with calculated columns (revenue, etc.)
-        transformed_path = self.output_dir / "synthetic_data.parquet"
-        transformed_df.to_parquet(transformed_path)
-        logger.info("Saved transformed dataset to %s", transformed_path)
 
         summaries = self.build_summaries(transformed_df)
         quality_results = self.run_quality_checks(transformed_df)

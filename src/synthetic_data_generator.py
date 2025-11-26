@@ -142,11 +142,11 @@ class SyntheticDataGenerator:
     def generate_quantity(self, category: str = None) -> int:
         """Generate quantity"""
         if category == "Furniture":
-            return random.randint(1, 5)
+            return random.randint(1, 2)
         elif category == "Technology":
-            return random.randint(1,20)
+            return random.randint(1,12)
         else:
-            return random.randint(1,100)
+            return random.randint(1,50)
     
     def generate_discount(self, quantity: int) -> float:
         """Generate discount percentages"""
@@ -168,19 +168,15 @@ class SyntheticDataGenerator:
     ) -> pd.DataFrame:
         """Generate synthetic sales records"""
 
-        logger.info("Generating %s synthetic rows...", num_rows)
-
         self.build_customer_pool(num_customers)
         customer_ids = list(self.customers.keys())
 
         synthetic_rows = []
 
         for row_id in range(1, num_rows + 1):
-            # Cycle through customers in order
             customer_index = (row_id - 1) % len(customer_ids)
             customer_id = customer_ids[customer_index]
             customer_data = self.customers[customer_id]
-
 
             category, sub_category, product = self.generate_product_details()
             order_date = self.generate_order_date(start_date=start_date, end_date=end_date)

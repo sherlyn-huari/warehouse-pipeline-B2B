@@ -19,7 +19,6 @@ class DimensionalModelBuilder:
 
     def __init__(self, warehouse_path: str | Path = "data/output/warehouse/sales_analytics.duckdb"):
         self.warehouse_path = Path(warehouse_path)
-        # Create parent directory if it doesn't exist
         self.warehouse_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.conn = duckdb.connect(str(self.warehouse_path))
@@ -184,9 +183,7 @@ class DimensionalModelBuilder:
             -- Surrogate key -> 20170101
             CAST(STRFTIME(date_value, '%Y%m%d') AS INTEGER) AS date_key,
             CAST(date_value AS DATE) AS date,
-            -- Year
             EXTRACT(YEAR FROM date_value) AS year,
-            -- Month
             EXTRACT(MONTH FROM date_value) AS month,
             STRFTIME(date_value, '%B') AS month_name
         FROM all_dates
@@ -308,25 +305,6 @@ class DimensionalModelBuilder:
 
         print("\n Foreign Key Coverage:")
         print(orphan_check.to_string(index=False))
-
-        # check  query
-        print("\n Sample Analytical Query - Sales by Region and Category:")
-        result = self.conn.execute("""
-            SELECT
-                l.region,
-                p.category,
-                COUNT(*) as order_count,
-                SUM(f.sales_amount) as total_revenue,
-                SUM(f.quantity) as total_quantity
-            FROM analytics.fact_sales f
-            JOIN analytics.dim_location l ON f.location_key = l.location_key
-            JOIN analytics.dim_product p ON f.product_key = p.product_key
-            GROUP BY l.region, p.category
-            ORDER BY total_revenue DESC
-            LIMIT 10
-        """).df()
-        print(result.to_string(index=False))
-
         logger.info("Dimensional model validation complete")
 
     def build_all(self) -> None:
