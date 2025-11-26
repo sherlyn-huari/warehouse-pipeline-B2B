@@ -54,7 +54,7 @@ python src/etl.py
 3. **Validate** – Runs Great Expectations quality checks
 4. **Load** – Saves to Parquet, exports CSV summaries, loads into DuckDB
 
-> **Note:** By default, `rebuild=True` regenerates all data on each run. To reuse existing data, set `rebuild=False` in [etl.py:280](src/etl.py#L280)
+> **Note:** ⚠️ By default, `rebuild=True` regenerates all data on each run. To reuse existing data, set `rebuild=False` in [etl.py:280](src/etl.py#L280)
 
 
 **Access the data warehouse in DUCKB:**
