@@ -270,7 +270,7 @@ class SalesETL:
     def run(
         self,
         num_synthetic_rows: int = 100_000,
-        start_date: date = date(2023, 1, 1),
+        start_date: date = date(2024, 1, 1),
         end_date: date = date(2024, 12, 31),
         rebuild: bool = True,
         build_star_schema: bool = True,

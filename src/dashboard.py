@@ -178,40 +178,42 @@ def main() -> None:
             top_customers = (
                 filtered_dataset.group_by("customer_name")
                 .agg([
-                    pl.col("revenue").sum().alias("total_revenue"),
-                    pl.col("order_id").n_unique().alias("total_orders"),
-                    pl.col("quantity").sum().alias("total_quantity")
+                    pl.col("revenue").sum().alias("total_revenue")
                 ])
                 .sort("total_revenue", descending=True)
                 .head(10)
                 .to_pandas()
             )
             top_customers['total_revenue'] = top_customers['total_revenue'].apply(lambda x: f"${x:,.0f}")
-            top_customers['total_orders'] = top_customers['total_orders'].apply(lambda x: f"{x:,}")
-            top_customers['total_quantity'] = top_customers['total_quantity'].apply(lambda x: f"{x:,}")
             top_customers = top_customers.rename(columns={
                 'customer_name': 'Customer',
-                'total_revenue': 'Revenue',
-                'total_orders': 'Orders',
-                'total_quantity': 'Quantity'
+                'total_revenue': 'Revenue'
             })
             st.dataframe(top_customers, use_container_width=True, height=300, hide_index=True)
         else:
             st.info("Customer data unavailable.")
 
     with left:
-        st.subheader("Cities by Revenue")
+        st.subheader("Top Performing Cities")
         if filtered_dataset is not None and len(filtered_dataset) > 0:
             cities = (
                 filtered_dataset.group_by("city")
-                .agg(pl.col("revenue").sum().alias("total_revenue"))
+                .agg([
+                    pl.col("revenue").sum().alias("total_revenue"),
+                    pl.col("order_id").n_unique().alias("total_orders"),
+                    pl.col("quantity").sum().alias("total_quantity")
+                ])
                 .sort("total_revenue", descending=True)
                 .to_pandas()
             )
             cities['total_revenue'] = cities['total_revenue'].apply(lambda x: f"${x:,.0f}")
+            cities['total_orders'] = cities['total_orders'].apply(lambda x: f"{x:,}")
+            cities['total_quantity'] = cities['total_quantity'].apply(lambda x: f"{x:,}")
             cities = cities.rename(columns={
                 'city': 'City',
-                'total_revenue': 'Revenue'
+                'total_revenue': 'Revenue',
+                'total_orders': 'Orders',
+                'total_quantity': 'Quantity'
             })
             st.dataframe(cities, use_container_width=True, height=300, hide_index=True)
         else:
@@ -248,42 +250,59 @@ def main() -> None:
         st.subheader("Revenue by Category")
         if filtered_dataset is not None and len(filtered_dataset) > 0:
             category_revenue = (
-                filtered_dataset.group_by("category")
+                filtered_dataset.group_by(["order_year","order_month","category"])
                 .agg(pl.col("revenue").sum().alias("total_revenue"))
-                .sort("total_revenue", descending=True)
-                .to_pandas()
+                .sort(["order_year", "order_month"])
             )
-            category_revenue['total_revenue'] = category_revenue['total_revenue'].apply(lambda x: f"${x:,.0f}")
-            category_revenue = category_revenue.rename(columns={
-                'category': 'Category',
-                'total_revenue': 'Revenue'
-            })
-            st.dataframe(category_revenue, use_container_width=True, height=300, hide_index=True)
+
+            category_revenue = category_revenue.with_columns(
+                (pl.col("order_year").cast(str) + "-" + pl.col("order_month").cast(str).str.zfill(2)).alias("year_month")
+            )
+
+            chart = (
+                alt.Chart(category_revenue.to_pandas())
+                .mark_line(point = True)
+                .encode(
+                    x=alt.X("year_month:O", title="Month", axis=alt.Axis(labelAngle=-45)),
+                    y=alt.Y("total_revenue:Q", title="Revenue", axis=alt.Axis(format="$,.0f")),
+                    color=alt.Color("category:N", title="Category"),
+                    tooltip=[
+                        alt.Tooltip("year_month:O", title="Month"),
+                        alt.Tooltip("total_revenue:Q", title="Revenue", format="$,.0f"),
+                        alt.Tooltip("category:N", title="Category")
+                    ]
+                )
+                .properties(height=300)
+            )
+            st.altair_chart(chart, use_container_width=True)
         else:
             st.info("Category data unavailable")
 
     with right:
-        st.subheader("Top 5 Products by Revenue")
+        st.subheader("Top 10 Products by Revenue")
         if filtered_dataset is not None and len(filtered_dataset) > 0:
             top_products = (
                 filtered_dataset.group_by(["category", "product_name"])
                 .agg([
                     pl.col("revenue").sum().alias("total_revenue"),
+                    pl.col("order_id").n_unique().alias("total_orders"),
                     pl.col("quantity").sum().alias("total_quantity")
                 ])
                 .sort("total_revenue", descending=True)
-                .head(5)
+                .head(10)
                 .to_pandas()
             )
             top_products['total_revenue'] = top_products['total_revenue'].apply(lambda x: f"${x:,.0f}")
-            top_products['total_quantity'] = top_products['total_quantity'].apply(lambda x: f"{x:,.0f}")
+            top_products['total_orders'] = top_products['total_orders'].apply(lambda x: f"{x:,}")
+            top_products['total_quantity'] = top_products['total_quantity'].apply(lambda x: f"{x:,}")
             top_products = top_products.rename(columns={
                 'category': 'Category',
                 'product_name': 'Product',
                 'total_revenue': 'Revenue',
+                'total_orders': 'Orders',
                 'total_quantity': 'Quantity'
             })
-            st.dataframe(top_products, use_container_width=True, height=300)
+            st.dataframe(top_products, use_container_width=True, height=300, hide_index=True)
         else:
             st.info("Product data unavailable")
 
