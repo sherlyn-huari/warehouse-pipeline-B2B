@@ -3,131 +3,131 @@
     "Paper": [
       {
         "name": "Copy Paper (500 sheets)",
-        "price": 7.99,
+        "price": 5.99,
         "product_id": "OFF-PA-10069780"
       },
       {
         "name": "Recycled Copy Paper (500 sheets)",
-        "price": 8.49,
+        "price": 6.49,
         "product_id": "OFF-PA-10053562"
       },
       {
         "name": "Color Copy Paper Pack",
-        "price": 11.99,
+        "price": 8.99,
         "product_id": "OFF-PA-10096660"
       }
     ],
     "Writing": [
       {
         "name": "Blue Ballpoint Pens (12-pack)",
-        "price": 4.99,
+        "price": 3.99,
         "product_id": "OFF-WR-10041490"
       },
       {
         "name": "Black Gel Pens (12-pack)",
-        "price": 6.49,
+        "price": 4.99,
         "product_id": "OFF-WR-10034174"
       },
       {
         "name": "Highlighter Set (4 colors)",
-        "price": 3.99,
+        "price": 2.99,
         "product_id": "OFF-WR-10014269"
       },
       {
         "name": "Permanent Markers (5-pack)",
-        "price": 5.49,
+        "price": 3.49,
         "product_id": "OFF-WR-10094976"
       }
     ],
     "Notes": [
       {
         "name": "Sticky Notes (3-pack)",
-        "price": 5.99,
+        "price": 4.49,
         "product_id": "OFF-NO-10029406"
       },
       {
         "name": "Notepad Pack (5 units)",
-        "price": 6.99,
+        "price": 5.49,
         "product_id": "OFF-NO-10075847"
       }
     ],
     "Labels": [
       {
         "name": "Address Labels (300 count)",
-        "price": 7.49,
+        "price": 5.99,
         "product_id": "OFF-LA-10068156"
       },
       {
         "name": "File Folder Labels (250 count)",
-        "price": 6.99,
+        "price": 4.99,
         "product_id": "OFF-LA-10082943"
       }
     ],
     "Filing": [
       {
         "name": "Manila Folders (50-pack)",
-        "price": 9.99,
+        "price": 7.99,
         "product_id": "OFF-FI-10030919"
       },
       {
         "name": "Hanging File Folders (25-pack)",
-        "price": 14.99,
+        "price": 10.99,
         "product_id": "OFF-FI-10018952"
       },
       {
         "name": "3-Inch Binder",
-        "price": 5.49,
+        "price": 4.49,
         "product_id": "OFF-FI-10027320"
       },
       {
         "name": "Binder Dividers (8 tabs)",
-        "price": 2.99,
+        "price": 2.49,
         "product_id": "OFF-FI-10096046"
       }
     ],
     "Mailing": [
       {
         "name": "Letter Envelopes (100-pack)",
-        "price": 4.99,
+        "price": 3.99,
         "product_id": "OFF-MA-10011350"
       },
       {
         "name": "Bubble Mailers (12-pack)",
-        "price": 8.99,
+        "price": 6.99,
         "product_id": "OFF-MA-10057252"
       }
     ],
     "Cleaning": [
       {
         "name": "Disinfecting Wipes",
-        "price": 4.99,
+        "price": 3.99,
         "product_id": "OFF-CL-10092212"
       },
       {
         "name": "Paper Towels (6 rolls)",
-        "price": 7.99,
+        "price": 5.99,
         "product_id": "OFF-CL-10079057"
       },
       {
         "name": "Trash Bags (50 count)",
-        "price": 8.49,
+        "price": 6.49,
         "product_id": "OFF-CL-10011494"
       }
     ],
     "Breakroom": [
       {
         "name": "Ground Coffee (1 lb)",
-        "price": 9.99,
+        "price": 7.99,
         "product_id": "OFF-BR-10031492"
       },
       {
         "name": "Tea Box (20 bags)",
-        "price": 3.49,
+        "price": 2.99,
         "product_id": "OFF-BR-10072294"
       },
       {
         "name": "Sugar Packets (100 count)",
-        "price": 2.99,
+        "price": 2.49,
         "product_id": "OFF-BR-10055925"
       }
     ]
@@ -136,56 +136,56 @@
     "Accessories": [
       {
         "name": "USB Cable (1m)",
-        "price": 6.99,
+        "price": 4.99,
         "product_id": "TEC-AC-10038982"
       },
       {
         "name": "HDMI Cable (2m)",
-        "price": 8.99,
+        "price": 6.99,
         "product_id": "TEC-AC-10021162"
       },
       {
         "name": "Wireless Mouse",
-        "price": 12.99,
+        "price": 9.99,
         "product_id": "TEC-AC-10061301"
       },
       {
-        "name": "Keyboard",
-        "price": 19.99,
+        "name": "USB Keyboard",
+        "price": 14.99,
         "product_id": "TEC-AC-10077016"
       },
       {
         "name": "Mouse Pad",
-        "price": 4.99,
+        "price": 3.99,
         "product_id": "TEC-AC-10094087"
       }
     ],
     "Printing": [
       {
-        "name": "Black Toner Cartridge",
-        "price": 69.99,
+        "name": "Black Ink Cartridge",
+        "price": 24.99,
         "product_id": "TEC-PR-10049524"
       },
       {
-        "name": "Color Toner Cartridge",
-        "price": 89.99,
+        "name": "Color Ink Cartridge",
+        "price": 29.99,
         "product_id": "TEC-PR-10091610"
       },
       {
-        "name": "Ink Cartridge Pack",
-        "price": 39.99,
+        "name": "Printer Paper (500 sheets)",
+        "price": 12.99,
         "product_id": "TEC-PR-10019848"
       }
     ],
     "Machines": [
       {
-        "name": "Office Shredder",
-        "price": 79.99,
+        "name": "Paper Shredder",
+        "price": 49.99,
         "product_id": "TEC-MA-10065632"
       },
       {
-        "name": "Basic Printer",
-        "price": 129.99,
+        "name": "Desk Lamp",
+        "price": 24.99,
         "product_id": "TEC-MA-10012700"
       }
     ]
@@ -193,37 +193,37 @@
   "Furniture": {
     "Chairs": [
       {
-        "name": "Basic Task Chair",
-        "price": 59.99,
+        "name": "Folding Chair",
+        "price": 29.99,
         "product_id": "FUR-CH-10098966"
       },
       {
-        "name": "Ergonomic Office Chair",
-        "price": 89.99,
+        "name": "Task Chair",
+        "price": 49.99,
         "product_id": "FUR-CH-10044247"
       }
     ],
     "Desks": [
       {
-        "name": "Simple Office Desk",
-        "price": 119.99,
+        "name": "Small Writing Desk",
+        "price": 79.99,
         "product_id": "FUR-DE-10070633"
       },
       {
-        "name": "Adjustable Standing Desk",
+        "name": "Computer Desk",
         "price": 99.99,
         "product_id": "FUR-DE-10085398"
       }
     ],
     "Storage": [
       {
-        "name": "2-Drawer Filing Cabinet",
-        "price": 89.99,
+        "name": "Plastic Storage Bins (3-pack)",
+        "price": 19.99,
         "product_id": "FUR-ST-10087908"
       },
       {
-        "name": "4-Drawer Filing Cabinet",
-        "price": 100.99,
+        "name": "Metal Bookshelf",
+        "price": 39.99,
         "product_id": "FUR-ST-10036590"
       }
     ]
