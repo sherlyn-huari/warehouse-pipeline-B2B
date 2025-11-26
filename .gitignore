@@ -2,15 +2,6 @@
 .venv/
 venv/
 
-# Kaggle / secrets
-kaggle.json
-.env
-.kaggle/
-
-# OS / editor
-.DS_Store
-.vscode/
-
 # editor configs
 .idea/
 .vscode/
@@ -19,5 +10,4 @@ kaggle.json
 __pycache__/
 *.pyc
 .venv/
-
 *.parquet

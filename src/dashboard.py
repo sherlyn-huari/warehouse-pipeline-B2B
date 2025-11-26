@@ -1,7 +1,5 @@
 from __future__ import annotations
-
 from pathlib import Path
-
 import altair as alt
 import polars as pl
 import streamlit as st
@@ -191,10 +189,10 @@ def main() -> None:
             })
             st.dataframe(top_customers, use_container_width=True, height=300, hide_index=True)
         else:
-            st.info("Customer data unavailable.")
+            st.info("Customer data unavailable")
 
     with left:
-        st.subheader("Top Performing Cities")
+        st.subheader("Top Performing Cities (Revenue - Orders - Quantity)")
         if filtered_dataset is not None and len(filtered_dataset) > 0:
             cities = (
                 filtered_dataset.group_by("city")
@@ -217,7 +215,7 @@ def main() -> None:
             })
             st.dataframe(cities, use_container_width=True, height=300, hide_index=True)
         else:
-            st.info("City data unavailable.")
+            st.info("City data unavailable")
 
     with right:
         st.subheader("Revenue by Region")
@@ -279,7 +277,7 @@ def main() -> None:
             st.info("Category data unavailable")
 
     with right:
-        st.subheader("Top 10 Products by Revenue")
+        st.subheader("Top 10 Products (Revenue - Orders - Quantity)")
         if filtered_dataset is not None and len(filtered_dataset) > 0:
             top_products = (
                 filtered_dataset.group_by(["category", "product_name"])

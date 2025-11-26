@@ -38,7 +38,7 @@ smart_sales_analyzer/
 git clone <repo-url>
 cd smart_sales_analyzer
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -49,57 +49,39 @@ python src/etl.py
 ```
 
 **Pipeline Steps:**
-1. **Generate** – Creates synthetic B2B sales data with realistic patterns
+1. **Generate** – Creates synthetic B2B sales data from [product_catalog.json](data/input/product_catalog.json)
 2. **Clean** – Removes duplicates, handles nulls, validates data types
 3. **Validate** – Runs Great Expectations quality checks
-4. **Load** – Saves to Parquet, CSV, and DuckDB
+4. **Load** – Saves to Parquet, exports CSV summaries, loads into DuckDB
 
-### 3. Build Data Warehouse
+> **Note:** ⚠️ By default, `rebuild=True` regenerates all data on each run. To reuse existing data, set `rebuild=False` in [etl.py:280](src/etl.py#L280)
 
-```bash
-python src/build_dimensional_model.py
-```
 
-Creates star schema with dimension and fact tables in DuckDB.
-
-### 4. Launch Dashboard
+**Access the data warehouse in DUCKB:**
 
 ```bash
-streamlit run src/dashboard.py
+# Open DuckDB CLI
+duckdb data/output/warehouse/sales_analytics.duckdb
+
+# Query dimension tables
+SELECT * FROM dim_customer LIMIT 10;
+SELECT * FROM dim_product WHERE category = 'Technology';
+SELECT * FROM dim_location WHERE region = 'West';
+SELECT * FROM dim_date WHERE year = 2023;
+
+# Query fact table
+SELECT * FROM fact_sales LIMIT 10;
+
+# Example of a query
+SELECT
+  d.year,
+  d.month_name,
+  SUM(f.sales_amount) as revenue
+FROM fact_sales f
+JOIN dim_date d ON f.order_date = d.date
+GROUP BY d.year, d.month_name
+ORDER BY d.year, d.month;
 ```
-
-Opens interactive dashboard at `http://localhost:8501`
-
-## Dashboard Features
-
-The Streamlit dashboard provides:
-
-- **KPI Metrics** – Revenue, Orders, Quantity, Customers, Products
-- **Filters** – Year and month selection
-- **Visualizations:**
-  - Revenue & Orders by Month (line charts)
-  - Revenue by Segment (multi-line chart)
-  - Top 10 Customers (table with revenue, orders, quantity)
-  - Cities by Revenue (sortable table)
-  - Revenue by Region (horizontal bar chart)
-  - Revenue by Category (table)
-  - Top 5 Products (table with category, revenue, quantity)
-
-All charts respond dynamically to filter selections!
-
-## Outputs
-
-| File | Description |
-|------|-------------|
-| `data/output/synthetic_data.parquet` | Full cleaned dataset |
-| `data/output/yearly.csv` | Yearly revenue aggregates |
-| `data/output/segment_yearly.csv` | Segment performance by year |
-| `data/output/regional_revenue.csv` | Revenue by region |
-| `data/output/top_products.csv` | Best-selling products |
-| `data/output/quality_report.json` | Data validation results |
-| `data/output/sales_analytics.duckdb` | Star schema warehouse |
-| `etl_pipeline.log` | Pipeline execution log |
-
 ## Data Warehouse Schema
 
 Star schema implementation in DuckDB:
@@ -126,3 +108,42 @@ dim_date ── fact_sales ── dim_product
 **fact_sales** – Grain: One row per order line item
 - Foreign keys: customer_id, product_id, location_id, order_date
 - Measures: sales_amount, quantity, unit_price, ship_latency_days
+
+
+### 3. Launch Dashboard
+
+```bash
+streamlit run src/dashboard.py
+```
+
+Opens interactive dashboard at `http://localhost:8501`
+
+## Dashboard Features
+
+The Streamlit dashboard provides:
+
+- **KPI Metrics** – Revenue, Orders, Quantity, Customers, Products
+- **Filters** – Year and month selection
+- **Visualizations:**
+  - Revenue & Orders by Month (line charts)
+  - Revenue by Segment (multi-line chart)
+  - Top 10 Customers (table with revenue, orders, quantity)
+  - Top Performing Cities (Revenue - Orders - Quantity) (sortable table)
+  - Revenue by Region (horizontal bar chart)
+  - Revenue by Category (table)
+  - Top 10 Products (Revenue - Orders - Quantity)
+
+All charts respond dynamically to filter selections!
+
+## Outputs
+
+| File | Description |
+|------|-------------|
+| `data/output/synthetic_data.parquet` | Full cleaned dataset |
+| `data/output/yearly.csv` | Yearly revenue aggregates |
+| `data/output/segment_yearly.csv` | Segment performance by year |
+| `data/output/regional_revenue.csv` | Revenue by region |
+| `data/output/top_products.csv` | Best-selling products |
+| `data/output/quality_report.json` | Data validation results |
+| `data/output/sales_analytics.duckdb` | Star schema warehouse |
+| `etl_pipeline.log` | Pipeline execution log |
