@@ -15,14 +15,14 @@ End-to-end B2B retail analytics platform featuring an ETL pipeline, dimensional 
 ```
 smart_sales_analyzer/
 ├── src/
-│   ├── etl.py                          # Main ETL pipeline
-│   ├── synthetic_data_generator.py     # Synthetic data creation
-│   ├── build_dimensional_model.py      # Star schema builder
-│   └── dashboard.py                    # Streamlit dashboard
+│   ├── etl.py                         
+│   ├── synthetic_data_generator.py     
+│   ├── build_dimensional_model.py  
+│   └── dashboard.py                   
 ├── data/
-│   ├── input/                          # Raw data files
-│   └── output/                         # Processed outputs & DuckDB
-└── requirements.txt                    # Python dependencies
+│   ├── input/                 
+│   └── output/                         
+└── requirements.txt                 
 ```
 
 ## Requirements
@@ -49,13 +49,32 @@ python src/etl.py
 ```
 
 **Pipeline Steps:**
-1. **Generate** – Creates synthetic B2B sales data from [product_catalog.json](data/input/product_catalog.json)
+1. **Generate** – Creates synthetic B2B sales data using [product_catalog.json](data/input/product_catalog.json)
 2. **Clean** – Removes duplicates, handles nulls, validates data types
 3. **Validate** – Runs Great Expectations quality checks
 4. **Load** – Saves to Parquet, exports CSV summaries, loads into DuckDB
 
-> **Note:** ⚠️ By default, `rebuild=True` regenerates all data on each run. To reuse existing data, set `rebuild=False` in [etl.py:280](src/etl.py#L280)
+**Customization Options:**
 
+Modify [etl.py:303](src/etl.py#L303) to adjust data generation:
+
+```python
+etl.run(
+    num_synthetic_rows=100_000,
+    start_date=date(2024, 1, 1),
+    end_date=date(2024, 12, 31),
+    rebuild=True
+)
+```
+
+To generate different synthetic datasets, change the seed in [synthetic_data_generator.py:44](src/synthetic_data_generator.py#L44):
+```python
+def __init__(self, input_dir: str | Path = "data/input", seed: int = 42):
+```
+
+> **⚠️ Data Regeneration:** By default, `rebuild=True` regenerates all synthetic data on each run. Set to `False` to reuse existing data and speed up development [etl.py:280](src/etl.py#L303).
+
+> **⚠️ Data Modeling - Start schema Regeneration:** By default, `build_star_schema=True` regenerates all the data modeling on each run. Set to `False` to reuse existing data modeling [etl.py:281](src/etl.py#L303).
 
 **Access the data warehouse in DUCKB:**
 
@@ -132,8 +151,6 @@ The Streamlit dashboard provides:
   - Revenue by Region (horizontal bar chart)
   - Revenue by Category (table)
   - Top 10 Products (Revenue - Orders - Quantity)
-
-All charts respond dynamically to filter selections!
 
 ## Outputs
 

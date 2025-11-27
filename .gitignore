@@ -9,5 +9,10 @@ venv/
 # Python
 __pycache__/
 *.pyc
-.venv/
+
+# Generated data and outputs
+data/output/*
+!data/output/sample_data.csv
 *.parquet
+*.log
+.env
