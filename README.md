@@ -2,6 +2,13 @@
 
 End-to-end B2B retail analytics platform featuring an ETL pipeline, dimensional data warehouse, and interactive dashboard. Uses synthetic sales data for testing and demonstration, with data quality validation via Great Expectations and interactive insights through Streamlit.
 
+<div align="center">
+<img src="images/dashboard_1.png" width=700>
+<div><i>Interactive sales analytics dashboard with real-time filtering</i></div>
+</div>
+
+
+
 ## Features
 
 - **ETL Pipeline** – Automated data extraction, transformation, and loading with data quality checks
