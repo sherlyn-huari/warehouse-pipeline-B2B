@@ -73,7 +73,7 @@ modify in this line [etl.py:303](src/etl.py#L303).
 
 - To generate different synthetic datasets, change the seed in [synthetic_data_generator.py:44](src/synthetic_data_generator.py#L44).
 
-- To rebuild your data modeling - Start schema you put True on each run, otherwise False to reuse existing data modeling [etl.py:281](src/etl.py#L303).
+- To rebuild your data modeling - Star schema, put True on each run, otherwise False to reuse existing data modeling [etl.py:281](src/etl.py#L281).
 
 ### 3. Launch Dashboard
 
@@ -138,10 +138,10 @@ dim_date ── fact_sales ── dim_product
 - Foreign keys: customer_id, product_id, location_id, order_date
 - Measures: sales_amount, quantity, unit_price, ship_latency_days
 
-**Access the data warehouse in DUCKB:**
+### Access the data warehouse in DuckDB:**
 
 ```bash
-# Open DuckDB CLI
+
 duckdb data/output/warehouse/sales_analytics.duckdb
 
 # Query dimension tables
