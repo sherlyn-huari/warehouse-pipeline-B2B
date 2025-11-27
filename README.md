@@ -2,6 +2,12 @@
 
 End-to-end B2B retail analytics platform featuring an ETL pipeline, dimensional data warehouse, and interactive dashboard. Uses synthetic sales data for testing and demonstration, with data quality validation via Great Expectations and interactive insights through Streamlit.
 
+<div align="center">
+<img src="images/dashboard_1.png" width=700>
+<div><i>Interactive sales analytics dashboard with real-time filtering</i></div>
+</div>
+
+
 ## Features
 
 - **ETL Pipeline** – Automated data extraction, transformation, and loading with data quality checks
@@ -54,80 +60,20 @@ python src/etl.py
 3. **Validate** – Runs Great Expectations quality checks
 4. **Load** – Saves to Parquet, exports CSV summaries, loads into DuckDB
 
-**Customization Options:**
+**Customization parts inside the pipeline:**
 
-Modify [etl.py:303](src/etl.py#L303) to adjust data generation:
+- To adjust the Data Generation like:
 
-```python
-etl.run(
-    num_synthetic_rows=100_000,
-    start_date=date(2024, 1, 1),
-    end_date=date(2024, 12, 31),
-    rebuild=True
-)
-```
+  1. Number of rows to generate
+  2. Start Date of the dataset
+  3. End Date of the dataset
+  4. Rebuild (True: if you want to regenerate the whole dataset / False: keep the last dataset you generate )
 
-To generate different synthetic datasets, change the seed in [synthetic_data_generator.py:44](src/synthetic_data_generator.py#L44):
-```python
-def __init__(self, input_dir: str | Path = "data/input", seed: int = 42):
-```
+modify in this line [etl.py:303](src/etl.py#L303).
 
-> **⚠️ Data Regeneration:** By default, `rebuild=True` regenerates all synthetic data on each run. Set to `False` to reuse existing data and speed up development [etl.py:280](src/etl.py#L303).
+- To generate different synthetic datasets, change the seed in [synthetic_data_generator.py:44](src/synthetic_data_generator.py#L44).
 
-> **⚠️ Data Modeling - Start schema Regeneration:** By default, `build_star_schema=True` regenerates all the data modeling on each run. Set to `False` to reuse existing data modeling [etl.py:281](src/etl.py#L303).
-
-**Access the data warehouse in DUCKB:**
-
-```bash
-# Open DuckDB CLI
-duckdb data/output/warehouse/sales_analytics.duckdb
-
-# Query dimension tables
-SELECT * FROM dim_customer LIMIT 10;
-SELECT * FROM dim_product WHERE category = 'Technology';
-SELECT * FROM dim_location WHERE region = 'West';
-SELECT * FROM dim_date WHERE year = 2023;
-
-# Query fact table
-SELECT * FROM fact_sales LIMIT 10;
-
-# Example of a query
-SELECT
-  d.year,
-  d.month_name,
-  SUM(f.sales_amount) as revenue
-FROM fact_sales f
-JOIN dim_date d ON f.order_date = d.date
-GROUP BY d.year, d.month_name
-ORDER BY d.year, d.month;
-```
-## Data Warehouse Schema
-
-Star schema implementation in DuckDB:
-
-```
-        dim_customer
-              |
-dim_date ── fact_sales ── dim_product
-              |
-        dim_location
-```
-
-### Dimension Tables
-
-| Table | Description | Key Attributes |
-|-------|-------------|----------------|
-| **dim_customer** | Customer master data | customer_id, name, segment |
-| **dim_product** | Product catalog | product_id, name, category, sub_category |
-| **dim_location** | Geographic hierarchy | city, state, postal_code, region, country |
-| **dim_date** | Calendar dimension | date, year, month, week, month_name |
-
-### Fact Table
-
-**fact_sales** – Grain: One row per order line item
-- Foreign keys: customer_id, product_id, location_id, order_date
-- Measures: sales_amount, quantity, unit_price, ship_latency_days
-
+- To rebuild your data modeling - Star schema, put True on each run, otherwise False to reuse existing data modeling [etl.py:281](src/etl.py#L281).
 
 ### 3. Launch Dashboard
 
@@ -164,3 +110,56 @@ The Streamlit dashboard provides:
 | `data/output/quality_report.json` | Data validation results |
 | `data/output/sales_analytics.duckdb` | Star schema warehouse |
 | `etl_pipeline.log` | Pipeline execution log |
+
+## Data Warehouse Schema
+
+Star schema implementation in DuckDB:
+
+```
+        dim_customer
+              |
+dim_date ── fact_sales ── dim_product
+              |
+        dim_location
+```
+
+### Dimension Tables
+
+| Table | Description | Key Attributes |
+|-------|-------------|----------------|
+| **dim_customer** | Customer master data | customer_id, name, segment |
+| **dim_product** | Product catalog | product_id, name, category, sub_category |
+| **dim_location** | Geographic hierarchy | city, state, postal_code, region, country |
+| **dim_date** | Calendar dimension | date, year, month, week, month_name |
+
+### Fact Table
+
+**fact_sales** – Grain: One row per order line item
+- Foreign keys: customer_id, product_id, location_id, order_date
+- Measures: sales_amount, quantity, unit_price, ship_latency_days
+
+### Access the data warehouse in DuckDB:**
+
+```bash
+
+duckdb data/output/warehouse/sales_analytics.duckdb
+
+# Query dimension tables
+SELECT * FROM dim_customer LIMIT 10;
+SELECT * FROM dim_product WHERE category = 'Technology';
+SELECT * FROM dim_location WHERE region = 'West';
+SELECT * FROM dim_date WHERE year = 2023;
+
+# Query fact table
+SELECT * FROM fact_sales LIMIT 10;
+
+# Example of a query
+SELECT
+  d.year,
+  d.month_name,
+  SUM(f.sales_amount) as revenue
+FROM fact_sales f
+JOIN dim_date d ON f.order_date = d.date
+GROUP BY d.year, d.month_name
+ORDER BY d.year, d.month;
+```
