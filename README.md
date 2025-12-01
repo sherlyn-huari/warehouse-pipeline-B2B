@@ -138,22 +138,22 @@ dim_date ── fact_sales ── dim_product
 - Foreign keys: customer_id, product_id, location_id, order_date
 - Measures: sales_amount, quantity, unit_price, ship_latency_days
 
-### Access the data warehouse in DuckDB:**
+### Access the data warehouse in DuckDB:
 
 ```bash
 
 duckdb data/output/warehouse/sales_analytics.duckdb
 
-# Query dimension tables
+# Query to use dim table
 SELECT * FROM dim_customer LIMIT 10;
 SELECT * FROM dim_product WHERE category = 'Technology';
 SELECT * FROM dim_location WHERE region = 'West';
 SELECT * FROM dim_date WHERE year = 2023;
 
-# Query fact table
-SELECT * FROM fact_sales LIMIT 10;
+# Query to use fact table 
+SELECT * FROM fact_sales LIMIT 10;}
 
-# Example of a query
+# Analytical query as an example
 SELECT
   d.year,
   d.month_name,
