@@ -30,6 +30,12 @@ smart_sales_analyzer/
 │   └── output/                         
 └── requirements.txt                 
 ```
+## Skills Demonstrated
+
+**Data Engineering:** ETL Pipeline Development • Data Quality Validation (Great Expectations) • Dimensional Modeling (Star Schema) • Data Warehousing (DuckDB) • Parquet File Format
+**Data Processing:** Python • Pandas • Data Cleaning & Transformation • Synthetic Data Generation (Faker)
+**Analytics & Visualization:** Streamlit • Business Intelligence Dashboards • SQL Query Optimization
+**Development Practices:** Logging • Error Handling • Modular Code Design • Git Version Control
 
 ## Requirements
 
