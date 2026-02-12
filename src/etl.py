@@ -1,5 +1,6 @@
 """Sales Analyzer - ETL pipeline"""
 from __future__ import annotations
+import argparse
 import logging
 import warnings
 import pyarrow as pa
@@ -15,8 +16,13 @@ from great_expectations.core.batch_spec import RuntimeDataBatchSpec
 from great_expectations.core.expectation_suite import ExpectationSuite
 from great_expectations.execution_engine import PandasExecutionEngine
 from great_expectations.validator.validator import Validator
-from synthetic_data_generator import SyntheticDataGenerator
-from build_dimensional_model import DimensionalModelBuilder
+
+try:
+    from synthetic_data_generator import SyntheticDataGenerator
+    from build_dimensional_model import DimensionalModelBuilder
+except ImportError:
+    from src.synthetic_data_generator import SyntheticDataGenerator
+    from src.build_dimensional_model import DimensionalModelBuilder
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,6 +30,66 @@ logging.basicConfig(
     handlers=[logging.FileHandler("etl_pipeline.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
+
+
+def parse_date(value: str) -> date:
+    """Parse ISO date string."""
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"Invalid date '{value}'. Use YYYY-MM-DD."
+        ) from exc
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run sales ETL pipeline")
+    parser.add_argument(
+        "--rows",
+        type=int,
+        default=100_000,
+        help="Number of synthetic rows to generate (default: 100000).",
+    )
+    parser.add_argument(
+        "--start-date",
+        type=parse_date,
+        default=date(2024, 1, 1),
+        help="Start date in YYYY-MM-DD format (default: 2024-01-01).",
+    )
+    parser.add_argument(
+        "--end-date",
+        type=parse_date,
+        default=date(2024, 12, 31),
+        help="End date in YYYY-MM-DD format (default: 2024-12-31).",
+    )
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="Always regenerate synthetic data.",
+    )
+    parser.add_argument(
+        "--reuse",
+        action="store_true",
+        help="Reuse existing parquet dataset if present.",
+    )
+    parser.add_argument(
+        "--build-star-schema",
+        action="store_true",
+        help="Build dimensional model in DuckDB after load.",
+    )
+    parser.add_argument(
+        "--skip-star-schema",
+        action="store_true",
+        help="Skip dimensional model build and only load analytics.sales.",
+    )
+
+    args = parser.parse_args()
+    if args.rebuild and args.reuse:
+        parser.error("Use only one of --rebuild or --reuse.")
+    if args.build_star_schema and args.skip_star_schema:
+        parser.error("Use only one of --build-star-schema or --skip-star-schema.")
+    return args
+
 
 class SalesETL:
     def __init__(
@@ -102,7 +168,7 @@ class SalesETL:
         """Get calculate metrics"""
 
         if "order_date" in df:
-            df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce", dayfirst=True)
+            df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
             df["order_year"] = df["order_date"].dt.year
             df["order_month"] = df["order_date"].dt.month
 
@@ -200,6 +266,7 @@ class SalesETL:
             if "discount" in df.columns:
                 result = validator.expect_column_values_to_be_between(
                     "discount", min_value = 0, max_value = 0.5)
+                expectations["discount_in_range"] = bool(result.success)
 
             if "quantity" in df.columns:
                 result = validator.expect_column_values_to_be_between(
@@ -281,6 +348,11 @@ class SalesETL:
         build_star_schema: bool = True,
     ) -> pd.DataFrame:
         """Execute the pipeline"""
+        if num_synthetic_rows < 1:
+            raise ValueError("num_synthetic_rows must be >= 1")
+        if start_date > end_date:
+            raise ValueError("start_date must be <= end_date")
+
         combined_df = self.build_dataset(
             num_synthetic_rows=num_synthetic_rows,
             start_date=start_date,
@@ -298,8 +370,27 @@ class SalesETL:
         return transformed_df
 
 if __name__ == "__main__":
+    args = parse_args()
+    rebuild = True
+    if args.reuse:
+        rebuild = False
+    elif args.rebuild:
+        rebuild = True
+
+    build_star_schema = True
+    if args.skip_star_schema:
+        build_star_schema = False
+    elif args.build_star_schema:
+        build_star_schema = True
+
     etl = SalesETL()
     try:
-        etl.run()
+        etl.run(
+            num_synthetic_rows=args.rows,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            rebuild=rebuild,
+            build_star_schema=build_star_schema,
+        )
     except ValueError as exc:
         logger.error("Pipeline aborted: %s", exc)

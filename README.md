@@ -60,26 +60,31 @@ pip install -r requirements.txt
 python src/etl.py
 ```
 
+Run with explicit parameters (recommended for reproducibility):
+
+```bash
+python src/etl.py \
+  --rows 100000 \
+  --start-date 2024-01-01 \
+  --end-date 2024-12-31 \
+  --rebuild \
+  --build-star-schema
+```
+
 **Pipeline Steps:**
 1. **Generate** – Creates synthetic B2B sales data using [product_catalog.json](data/input/product_catalog.json)
 2. **Clean** – Removes duplicates, handles nulls, validates data types
 3. **Validate** – Runs Great Expectations quality checks
 4. **Load** – Saves to Parquet, exports CSV summaries, loads into DuckDB
 
-**Customization parts inside the pipeline:**
+**Useful ETL flags:**
 
-- To adjust the Data Generation like:
+- `--rows`: number of synthetic rows to generate.
+- `--start-date` and `--end-date`: dataset date range.
+- `--rebuild` or `--reuse`: regenerate data or reuse existing parquet.
+- `--build-star-schema` or `--skip-star-schema`: build dimensional model or skip it.
 
-  1. Number of rows to generate
-  2. Start Date of the dataset
-  3. End Date of the dataset
-  4. Rebuild (True: if you want to regenerate the whole dataset / False: keep the last dataset you generate )
-
-modify in this line [etl.py:303](src/etl.py#L303).
-
-- To generate different synthetic datasets, change the seed in [synthetic_data_generator.py:44](src/synthetic_data_generator.py#L44).
-
-- To rebuild your data modeling - Star schema, put True on each run, otherwise False to reuse existing data modeling [etl.py:281](src/etl.py#L281).
+To generate a different synthetic dataset distribution, change the seed in `src/synthetic_data_generator.py`.
 
 ### 3. Launch Dashboard
 
@@ -88,6 +93,12 @@ streamlit run src/dashboard.py
 ```
 
 Opens interactive dashboard at `http://localhost:8501`
+
+### 4. Run Tests
+
+```bash
+python -m unittest discover -s tests -q
+```
 
 ## Dashboard Features
 
